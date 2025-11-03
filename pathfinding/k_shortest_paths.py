@@ -9,7 +9,7 @@ def top_k_shortest_paths(G, source, target, k=3, cutoff=None, weight='weight'):
     
     try:
         # generate simple paths by sorting following increased total weight 
-        generator = nx.shortest_simple_paths(G, source, target, weight=weight)
+        generator = nx.shortest_simple_paths(G, source, target, weight=weight) # lazy
         
         # take k simple paths from generator
         if cutoff is None:
