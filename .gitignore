@@ -1,0 +1,15 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Dataset và log sinh ra
+*.csv
+*.log
+
+# Plot / hình ảnh sinh ra
+*.png
+*.jpg
+*.jpeg
