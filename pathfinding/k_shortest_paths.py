@@ -16,13 +16,13 @@ def top_k_shortest_paths(G, source, target, k=3, cutoff=None, weight='weight'):
             return list(islice(generator, k))
         else:
         # limited the number of nodes per path
-            resultSet = [] # set of satisfactory paths
+            resultList = [] # list of satisfactory paths
             for path in generator:
                 if len(path) <= cutoff:
-                    resultSet.append(path)
+                    resultList.append(path)
                 if len(path) >= k: # k paths
                     break
-            return resultSet
+            return resultList
     except(nx.NetworkXNoPath, nx.NodeNotFound): # path doesnt exist
         return []
         
