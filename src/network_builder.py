@@ -1,22 +1,18 @@
 import networkx as nx
 
 def create_sample_network():
-    """
-    Return a small undirected weighted graph for testing.
-    Nodes: A,B,C,D,E
-    Edge weights represent attack 'cost' (lower -> easier).
-    """
-    G = nx.Graph()
-    edges = [
-        ("A","B",2),
-        ("A","C",5),
-        ("B","C",1),
-        ("B","D",2),
-        ("C","D",3),
-        ("C","E",1),
-        ("D","E",2),
-    ]
-    G.add_weighted_edges_from(edges)  # sets attribute 'weight'
+    graph = {
+        'A': {'B': 2, 'C': 5},
+        'B': {'C': 1, 'D': 4},
+        'C': {'D': 2, 'E': 3},
+        'D': {'F': 1},
+        'E': {'F': 5},
+        'F': {}
+    }
+    G = nx.DiGraph()
+    for u in graph:
+        for v, w in graph[u].items():
+            G.add_edge(u, v, weight=w)
     return G
 
 if __name__ == "__main__":
