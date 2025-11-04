@@ -9,7 +9,7 @@ from src.feature_extractor import extract_features
 
 
 def softmax(x):
-    """Chuẩn hóa mảng thành phân phối xác suất."""
+    # nomolize outputs to prohibility distribution
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()
 
@@ -67,9 +67,9 @@ def run_simulator(n_samples=200, k=4):
             writer.writeheader()
             writer.writerows(dataset)
 
-        print(f"✅ Dataset saved to data/generated_paths.csv ({len(dataset)} samples)")
+        print(f" Dataset saved to data/generated_paths.csv ({len(dataset)} samples)")
     else:
-        print("⚠️ No valid paths generated. Try increasing graph connectivity or n_samples.")
+        print(" No valid paths generated. Try increasing graph connectivity or n_samples.")
 
 
 if __name__ == "__main__":
