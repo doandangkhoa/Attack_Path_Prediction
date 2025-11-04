@@ -1,28 +1,76 @@
 import csv
 import random
-from pathfinding.k_shortest_paths import top_k_shortest_paths
+import os
+import math
+import numpy as np
+from src.pathfinding.k_shortest_paths import top_k_shortest_paths
 from src.network_builder import create_sample_network
-from .feature_extractor import extract_features
+from src.feature_extractor import extract_features
 
-graph = create_sample_network()
 
-# get top-k candidate paths
-candidates = top_k_shortest_paths(graph, 'A', 'F', k=4)
-shortest_len = len(candidates[0])
+def softmax(x):
+    """Chuẩn hóa mảng thành phân phối xác suất."""
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum()
 
-# Buid dataset
-dataset = []
-for path in candidates:
-    features = extract_features(path, graph, shortest_len)
-    features['label'] = random.choice([0, 1])
-    features['path'] = path
-    dataset.append(features)
-    
-# save to CSV
-keys = dataset[0].keys()
-with open('data/generated_paths.csv', 'w', newline='') as f:
-    writer = csv.DictWriter(f, fieldnames=keys)
-    writer.writeheader()
-    writer.writerows(dataset)
 
-print("Dataset saved to data/generated_paths.csv")
+def attacker_policy(features_list, alpha=1.0, beta=0.5, noise=0.1):
+    """
+    Chọn đường đi theo softmax(-alpha * weight - beta * length + noise)
+    => Đường ngắn và nhẹ hơn sẽ có xác suất cao hơn.
+    """
+    scores = []
+    for f in features_list:
+        score = -alpha * f["total_weight"] - beta * f["path_length"] + random.gauss(0, noise)
+        scores.append(score)
+    probs = softmax(np.array(scores))
+    return probs
+
+
+def run_simulator(n_samples=200, k=4):
+    """
+    Sinh dữ liệu huấn luyện mô phỏng hành vi attacker bằng policy softmax.
+    """
+    graph = create_sample_network()
+    nodes = list(graph.nodes())
+    dataset = []
+
+    for _ in range(n_samples):
+        src, dst = random.sample(nodes, 2)
+        candidates = top_k_shortest_paths(graph, src, dst, k=k)
+        if not candidates:
+            continue
+
+        shortest_len = len(candidates[0])
+
+        # Trích xuất đặc trưng cho từng đường
+        features_list = [extract_features(p, graph, shortest_len) for p in candidates]
+        probs = attacker_policy(features_list, alpha=1.0, beta=0.3, noise=0.15)
+
+        # Xác suất attacker chọn đường nào
+        chosen_index = np.random.choice(len(candidates), p=probs)
+
+        for i, f in enumerate(features_list):
+            f["label"] = 1 if i == chosen_index else 0  # attacker chọn đường này
+            f["src"] = src
+            f["dst"] = dst
+            f["path"] = " -> ".join(candidates[i])
+            f["probability"] = round(float(probs[i]), 3)
+            dataset.append(f)
+
+    os.makedirs("data", exist_ok=True)
+
+    if dataset:
+        keys = dataset[0].keys()
+        with open("data/generated_paths.csv", "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=keys)
+            writer.writeheader()
+            writer.writerows(dataset)
+
+        print(f"✅ Dataset saved to data/generated_paths.csv ({len(dataset)} samples)")
+    else:
+        print("⚠️ No valid paths generated. Try increasing graph connectivity or n_samples.")
+
+
+if __name__ == "__main__":
+    run_simulator(n_samples=100, k=4)

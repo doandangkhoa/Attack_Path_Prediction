@@ -1,7 +1,7 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 import os
-from pathfinding.k_shortest_paths import top_k_shortest_paths
+from src.pathfinding.k_shortest_paths import top_k_shortest_paths
 from src.network_builder import create_sample_network
 
 
