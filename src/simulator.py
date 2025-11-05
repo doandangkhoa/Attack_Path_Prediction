@@ -4,13 +4,15 @@ import os
 import math
 import numpy as np
 from src.pathfinding.k_shortest_paths import top_k_shortest_paths
-from src.network_builder import create_sample_network
+from src.network_builder import create_sample_network, create_scenario
 from src.feature_extractor import extract_features
 
 
 def softmax(x):
     # nomolize outputs to prohibility distribution
-    e_x = np.exp(x - np.max(x))
+    # goal : make data more diverse for training
+    e_x = np.exp(x - np.max(x)) # lấy tất cả phần tử trừ đi phần tử max để tránh tràn số vì hàm e mũ có thể rất lớn
+                                # vẫn giữ được tỉ lệ xác suất giữa các phần tử 
     return e_x / e_x.sum()
 
 
@@ -23,33 +25,37 @@ def attacker_policy(features_list, alpha=1.0, beta=0.5, noise=0.1):
     for f in features_list:
         score = -alpha * f["total_weight"] - beta * f["path_length"] + random.gauss(0, noise)
         scores.append(score)
+        
+    # convert real value to prohibility
     probs = softmax(np.array(scores))
-    return probs
+    return probs # prohibility np array of paths
 
 
 def run_simulator(n_samples=200, k=4):
     """
     Sinh dữ liệu huấn luyện mô phỏng hành vi attacker bằng policy softmax.
     """
-    graph = create_sample_network()
+    graph = create_scenario()
     nodes = list(graph.nodes())
     dataset = []
 
     for _ in range(n_samples):
+        # initialize 
         src, dst = random.sample(nodes, 2)
         candidates = top_k_shortest_paths(graph, src, dst, k=k)
         if not candidates:
             continue
-
+            
         shortest_len = len(candidates[0])
 
         # Trích xuất đặc trưng cho từng đường
         features_list = [extract_features(p, graph, shortest_len) for p in candidates]
         probs = attacker_policy(features_list, alpha=1.0, beta=0.3, noise=0.15)
 
-        # Xác suất attacker chọn đường nào
-        chosen_index = np.random.choice(len(candidates), p=probs)
-
+        # Xác suất attacker chọn đường nào(random with bias)
+        chosen_index = np.random.choice(len(candidates), p=probs) # chọn ngẫu nhiên dựa trên xác suất của các ứng viên 
+        
+        # generating data for trainning data
         for i, f in enumerate(features_list):
             f["label"] = 1 if i == chosen_index else 0  # attacker chọn đường này
             f["src"] = src
@@ -73,4 +79,4 @@ def run_simulator(n_samples=200, k=4):
 
 
 if __name__ == "__main__":
-    run_simulator(n_samples=100, k=4)
+    run_simulator(n_samples=100000, k=4)

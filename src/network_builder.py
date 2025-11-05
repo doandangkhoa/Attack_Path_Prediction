@@ -74,6 +74,17 @@ def create_scenario(scenario_name="sample"):
     else:
         raise ValueError(f"Unknown scenario: {scenario_name}")
 
+def create_random_network(n_nodes=6, edge_prob=0.4, weight_range=(1, 10)):
+    # automatically generate network n_nodes, prohibility of edge
+    G = nx.DiGraph()
+    nodes = [chr(65 + i) for i in range(n_nodes)]
+    
+    for u in nodes:
+        for v in nodes:
+            if(u != v) and random.random() < edge_prob:
+                weight = random.random(*weight_range)
+                G.add_edge(u, v, weight)
+    return G
 
 if __name__ == "__main__":
     # quick test
