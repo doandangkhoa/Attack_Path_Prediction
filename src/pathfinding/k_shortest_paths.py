@@ -3,13 +3,13 @@ from itertools import islice
 
 # Yen's algorithm
 
-def top_k_shortest_paths(G, source, target, k=3, cutoff=None, weight='weight'):
+def top_k_shortest_paths(G, source, dest, k=3, cutoff=None, weight='weight'):
     # k : number of paths, cutoff : maximum nodes per path
     # initial directed graph by networkx from graph
     
     try:
         # generate simple paths by sorting following increased total weight 
-        generator = nx.shortest_simple_paths(G, source, target, weight=weight) # lazy
+        generator = nx.shortest_simple_paths(G, source, dest, weight=weight) # lazy
         
         # take k simple paths from generator
         if cutoff is None:

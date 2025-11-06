@@ -1,9 +1,82 @@
 import networkx as nx
 import random
+from collections import Counter
 
-def create_sample_network():
+def assign_roles(G, role_distribution=None):
     """
-    Original fixed network — small demo graph
+    Gán role và security_level cho từng node trong đồ thị G.
+    """
+    # random.seed(seed)
+    nodes = list(G.nodes())
+
+    if role_distribution is None:
+        role_distribution = {
+            'client': 0.4,
+            'server': 0.15,       # bao gồm cả database
+            'firewall': 0.2,
+            'router': 0.25
+        }
+    roles = list(role_distribution.keys())
+    probs = list(role_distribution.values())
+    total = sum(probs)
+    probs = [p / total for p in probs]
+
+    for node in nodes:
+        role = random.choices(roles, weights=probs, k=1)[0]
+        G.nodes[node]['role'] = role
+
+
+
+def build_random_network(n_nodes=10, edge_prob=0.4, weight_range=(1, 11), firewall_penalty=3):
+    """
+    Tạo đồ thị mạng ngẫu nhiên có trọng số, vai trò node, và penalty khi đi qua firewall.
+    """
+    # random.seed(seed)
+    
+    G = nx.DiGraph()
+    temp_nodes = [i for i in range(n_nodes)]
+    G.add_nodes_from(temp_nodes)
+    assign_roles(G)
+
+    # đổi tên node theo vai trò
+    mapping = {}
+    role_counters = {'client':0, 'server':0, 'firewall':0, 'router':0}
+    
+    for node in temp_nodes:
+        role = G.nodes[node]['role']
+        role_counters[role] += 1
+        prefix = role[0]
+        new_name = f"{prefix}{role_counters[role]}"
+        mapping[node] = new_name
+    
+    # áp dụng đổi tên nx  
+    G = nx.relabel_nodes(G, mapping)
+    
+    # Gán lại vai trò vào node mới
+    for new_node in G.nodes():
+        role_char = new_node[0]
+        role_map = {'c': 'client', 's': 'server', 'f': 'firewall', 'r': 'router'}
+        G.nodes[new_node]['role'] = role_map[role_char]
+
+    # Tạo cạnh ngẫu nhiên với trọng số
+    nodes = list(G.nodes())
+    for u in nodes:
+        for v in nodes:
+            if u != v and random.random() < edge_prob:
+                # random < edge_prob --> tạo cạnh 
+                base_weight = random.randint(*weight_range)
+
+                # Nếu đích là firewall → tăng trọng số để mô phỏng penalty
+                if G.nodes[v]['role'] == 'firewall':
+                    base_weight += firewall_penalty
+
+                G.add_edge(u, v, weight=base_weight)
+
+    return G
+
+def build_sample_network():
+    """
+    Tạo đồ thị mẫu đơn giản để kiểm thử thuật toán và mô hình.
     """
     graph = {
         'A': {'B': 2, 'C': 5},
@@ -17,81 +90,29 @@ def create_sample_network():
     for u in graph:
         for v, w in graph[u].items():
             G.add_edge(u, v, weight=w)
+    assign_roles(G)
     return G
 
+def display_network_info(G, name=""):
+    print(f"\n--- Network: {name} ---")
+    print("Nodes with roles and security levels:")
+    role_counts = Counter()
+    for node, data in G.nodes(data=True):
+        role = data.get('role', 'unknown')
+        sec = data.get('security_level', '?')
+        role_counts[role] += 1
+        print(f"  {node}: role={role}, security_level={sec}")
+    print("Role distribution:", dict(role_counts))
 
-def create_linear_network(n=6):
-    """
-    Create a linear chain: A -> B -> C -> ... -> N
-    """
-    G = nx.DiGraph()
-    nodes = [chr(ord('A') + i) for i in range(n)]
-    for i in range(n - 1):
-        G.add_edge(nodes[i], nodes[i + 1], weight=random.randint(1, 10))
-    return G
-
-
-def create_star_network(center='A', num_branches=5):
-    """
-    Create a star topology: center connects to all leaves.
-    """
-    G = nx.DiGraph()
-    for i in range(num_branches):
-        leaf = chr(ord('B') + i)
-        w1, w2 = random.randint(1, 10), random.randint(1, 10)
-        G.add_edge(center, leaf, weight=w1)
-        G.add_edge(leaf, center, weight=w2)  # optional bidirectional
-    return G
-
-
-def create_mesh_network(n=4, p=0.4):
-    """
-    Create random mesh (Erdős–Rényi-like) directed graph.
-    n: number of nodes
-    p: probability of edge between any pair
-    """
-    G = nx.DiGraph()
-    nodes = [chr(ord('A') + i) for i in range(n)]
-    for u in nodes:
-        for v in nodes:
-            if u != v and random.random() < p:
-                G.add_edge(u, v, weight=random.randint(1, 10))
-    return G
-
-
-def create_scenario(scenario_name="sample"):
-    """
-    Factory function: return graph based on scenario name
-    """
-    if scenario_name == "sample":
-        return create_sample_network()
-    elif scenario_name == "linear":
-        return create_linear_network()
-    elif scenario_name == "star":
-        return create_star_network()
-    elif scenario_name == "mesh":
-        return create_mesh_network()
-    else:
-        raise ValueError(f"Unknown scenario: {scenario_name}")
-
-def create_random_network(n_nodes=6, edge_prob=0.4, weight_range=(1, 10)):
-    # automatically generate network n_nodes, prohibility of edge
-    G = nx.DiGraph()
-    nodes = [chr(65 + i) for i in range(n_nodes)]
-    
-    for u in nodes:
-        for v in nodes:
-            if(u != v) and random.random() < edge_prob:
-                weight = random.random(*weight_range)
-                G.add_edge(u, v, weight)
-    return G
+    print("\nEdges with weights:")
+    for u, v, d in G.edges(data=True):
+        print(f"  {u} -> {v}, weight={d['weight']}")
 
 if __name__ == "__main__":
-    # quick test
-    for name in ["sample", "linear", "star", "mesh"]:
-        G = create_scenario(name)
-        print(f"\n--- Scenario: {name} ---")
-        print("Nodes:", list(G.nodes()))
-        print("Edges with weights:")
-        for u, v, d in G.edges(data=True):
-            print(f"  {u} -> {v}, weight={d['weight']}")
+    scenarios = {
+        "sample": build_sample_network(),
+        "random": build_random_network(n_nodes=20),
+    }
+
+    for name, G in scenarios.items():
+        display_network_info(G, name)
