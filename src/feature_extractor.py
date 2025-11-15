@@ -4,7 +4,6 @@ from collections import Counter
 def extract_features(candidate_path, graph, shortest_path_len, role_weights=None):
     """
     Trích xuất đặc trưng cho một đường đi trong đồ thị.
-    Gồm cả đặc trưng cơ bản và nâng cao, không phân mode.
     """
     if not candidate_path or len(candidate_path) < 2:
         return {

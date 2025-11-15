@@ -11,9 +11,9 @@ from src.feature_extractor import extract_features
 
 def softmax(x):
     # nomolize outputs to prohibility distribution
-    # goal : make data more diverse for training
+    # purpose : make data more diverse for training
     e_x = np.exp(x - np.max(x)) # lấy tất cả phần tử trừ đi phần tử max để tránh tràn số vì hàm e mũ có thể rất lớn
-                                # vẫn giữ được tỉ lệ xác suất giữa các phần tử 
+                                # vẫn giữ được tỉ lệ xác suất giữa các phần tử  
     return e_x / e_x.sum()
 
 
