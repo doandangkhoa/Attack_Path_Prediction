@@ -1,18 +1,25 @@
 import pandas as pd
 import os
+import json
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
+from sklearn.metrics import (
+    accuracy_score, 
+    f1_score, 
+    confusion_matrix, 
+    classification_report
+)
 import joblib
+
 
 def train_baseline(csv_path="data/generated_paths_full.csv"):
     print("Loading dataset...")
     df = pd.read_csv(csv_path)
     
     trained_features = [
-        "path_length", 
-        "total_weight", 
-        "avg_weight", 
+        "path_length",
+        "total_weight",
+        "avg_weight",
         "deviation_from_shortest",
         "std_weight",
         "firewall_crossings",
@@ -20,24 +27,31 @@ def train_baseline(csv_path="data/generated_paths_full.csv"):
         "role_score"
     ]
     
-    X= df[trained_features]
+    X = df[trained_features]
     y = df["label"]
-    
+
+    # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.25, random_state=42, stratify=y # ?
+        X, y,
+        test_size=0.25,
+        random_state=42,
+        stratify=y
     )
+    
     print("Training Random Forest...")
     model = RandomForestClassifier(
-        n_estimators = 120,
+        n_estimators=120,
         random_state=42,
         class_weight="balanced"
     )
     model.fit(X_train, y_train)
-    # Predicting
+
+    # Predict
     y_pred = model.predict(X_test)
+
     # Metrics
     acc = accuracy_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred, average="binary")
+    f1 = f1_score(y_test, y_pred)
     cm = confusion_matrix(y_test, y_pred)
 
     print("\n=== BASELINE MODEL REPORT ===")
@@ -48,15 +62,29 @@ def train_baseline(csv_path="data/generated_paths_full.csv"):
     print("\nClassification Report:")
     print(classification_report(y_test, y_pred))
 
-    # Feature importance
     print("\nFeature Importances:")
+    feat_importance = {}
     for name, score in sorted(zip(trained_features, model.feature_importances_), key=lambda x: -x[1]):
+        feat_importance[name] = float(score)
         print(f"{name:25s} : {score:.4f}")
 
-    # Lưu lại model
+    # Save model
     os.makedirs("models", exist_ok=True)
     joblib.dump(model, "models/rf_baseline.pkl")
     print("\nModel saved to models/rf_baseline.pkl")
+
+    # Save metrics
+    metrics = {
+        "accuracy": float(acc),
+        "f1": float(f1),
+        "confusion_matrix": cm.tolist(),
+        "feature_importance": feat_importance
+    }
+
+    with open("models/metrics.json", "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    print("Metrics saved to models/metrics.json")
 
 
 if __name__ == "__main__":

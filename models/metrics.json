@@ -1,0 +1,24 @@
+{
+    "accuracy": 0.805,
+    "f1": 0.6422018348623854,
+    "confusion_matrix": [
+        [
+            630,
+            120
+        ],
+        [
+            75,
+            175
+        ]
+    ],
+    "feature_importance": {
+        "deviation_from_shortest": 0.32619606765006043,
+        "total_weight": 0.17082776956166076,
+        "std_weight": 0.15169899954777483,
+        "role_score": 0.11727308568151508,
+        "avg_weight": 0.091894356710945,
+        "role_entropy": 0.06920610821846938,
+        "path_length": 0.06475971496443769,
+        "firewall_crossings": 0.008143897665136906
+    }
+}
