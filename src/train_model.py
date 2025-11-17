@@ -3,12 +3,7 @@ import os
 import json
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    accuracy_score, 
-    f1_score, 
-    confusion_matrix, 
-    classification_report
-)
+from sklearn.metrics import (accuracy_score, f1_score, confusion_matrix, classification_report)
 import joblib
 
 
@@ -40,7 +35,7 @@ def train_baseline(csv_path="data/generated_paths_full.csv"):
     
     print("Training Random Forest...")
     model = RandomForestClassifier(
-        n_estimators=120,
+        n_estimators=120, # the number of decision trees
         random_state=42,
         class_weight="balanced"
     )

@@ -6,7 +6,7 @@ def assign_roles(G, role_distribution=None):
     """
     Gán role và security_level cho từng node trong đồ thị G.
     """
-    # random.seed(seed)
+    random.seed(42)
     nodes = list(G.nodes())
 
     if role_distribution is None:
@@ -31,7 +31,7 @@ def build_random_network(n_nodes=10, edge_prob=0.4, weight_range=(1, 11), firewa
     """
     Tạo đồ thị mạng ngẫu nhiên có trọng số, vai trò node, và penalty khi đi qua firewall.
     """
-    # random.seed(seed)
+    random.seed(42)
     
     G = nx.DiGraph()
     temp_nodes = [i for i in range(n_nodes)]
