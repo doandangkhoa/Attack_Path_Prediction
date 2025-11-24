@@ -1,132 +1,51 @@
 import streamlit as st
 import numpy as np
+import pandas as pd # Thêm pandas để hiển thị bảng đẹp hơn
 from pyvis.network import Network
 import streamlit.components.v1 as components
 import json
 import os, sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.network_builder import build_random_network
 from src.predict_attack import predict_attack
 
-
 # ==========================================
-# Streamlit config
-st.set_page_config(layout="wide", page_title="ML Path Prediction Demo")
+# 1. PAGE CONFIG & CSS (Làm đẹp Dashboard)
+# ==========================================
+st.set_page_config(
+    layout="wide", 
+    page_title="CyberSec Path Analysis Dashboard",
+    page_icon="🛡️",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS để làm đẹp các metrics và layout
+st.markdown("""
+<style>
+    /* Chỉnh màu nền cho metric */
+    div[data-testid="stMetric"] {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #dcdcdc;
+    }
+    /* Chỉnh tiêu đề */
+    h1 {
+        color: #2c3e50;
+    }
+    /* Chỉnh bảng */
+    div[data-testid="stDataFrame"] {
+        width: 100%;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 MODEL_PATH = "models/rf_baseline.pkl"
 METRICS_PATH = "models/metrics.json"
-
 os.makedirs("models", exist_ok=True)
 os.makedirs("data", exist_ok=True)
 
-
 # ==========================================
-# Utilities — Graph visualize
-def pyvis_graph(G, highlight_paths=None, best_path=None):
-    net = Network(height="650px", width="100%", bgcolor="white", font_color="black")
-    net.force_atlas_2based()
-
-    # 1. Thêm các nút (Nodes) - Giữ nguyên
-    for n, d in G.nodes(data=True):
-        role = d.get("role", "router")
-        color = {
-            "client": "#b8f2e6",
-            "server": "#fefbbd",
-            "firewall": "#ef8d7a",
-            "router": "#737676"
-        }.get(role, "#6C6C6A")
-
-        net.add_node(n, label=n, title=f"{n} ({role})", color=color)
-
-    # 2. Xây dựng thuộc tính cho các cạnh (Edges)
-    edge_props = {}
-    
-    # --- 2a. Thêm thuộc tính mặc định (Giữ nguyên) ---
-    for u, v, d in G.edges(data=True):
-        edge_key = (u, v)
-        if edge_key not in edge_props:
-            edge_props[edge_key] = {
-                "u": u, "v": v, "color": "#E0E0E0", "width": 2,
-                "title": str(d.get("weight", 1)), "arrows": None
-            }
-        if (v, u) not in edge_props:
-             edge_props[(v, u)] = {
-                "u": v, "v": u, "color": "#E0E0E0", "width": 2,
-                "title": str(d.get("weight", 1)), "arrows": None
-            }
-
-    # --- 2b. Cập nhật Top-K (Giữ nguyên) ---
-    if highlight_paths:
-        for p in highlight_paths:
-            for a, b in zip(p[:-1], p[1:]):
-                edge_key = (a, b) 
-                if edge_key in edge_props:
-                    edge_props[edge_key]["color"] = "red"
-                    edge_props[edge_key]["width"] = 3
-                    edge_props[edge_key]["arrows"] = "to"
-                
-                # Chúng ta sẽ xử lý cạnh ngược (màu xám) ở Step 3
-                # nên không cần xóa nó ở đây.
-
-    # --- 2c. Cập nhật Best path (Giữ nguyên) ---
-    if best_path:
-        for a, b in zip(best_path[:-1], best_path[1:]):
-            edge_key = (a, b) 
-            if edge_key in edge_props:
-                edge_props[edge_key]["color"] = "gold"
-                edge_props[edge_key]["width"] = 7
-                edge_props[edge_key]["arrows"] = "to"
-    
-    # Set này sẽ lưu các cạnh VÔ HƯỚNG (frozenset) đã được vẽ
-    drawn_undirected_edges = set() 
-    
-    # Tách các cạnh thành 2 nhóm: highlighted (có mũi tên) và default (không)
-    highlighted_props = []
-    default_props = []
-    
-    for props in edge_props.values():
-        if props["arrows"] is not None:
-            highlighted_props.append(props)
-        else:
-            default_props.append(props)
-
-    # --- 3a. Vẽ tất cả các cạnh HIGHLIGHTED (đỏ/vàng) TRƯỚC ---
-    for props in highlighted_props:
-        u, v = props["u"], props["v"]
-        net.add_edge(
-            u, v, 
-            title=props["title"], 
-            color=props["color"], 
-            width=props["width"],
-            arrows=props["arrows"]
-        )
-        # Đánh dấu cạnh VÔ HƯỚNG này là đã được vẽ
-        drawn_undirected_edges.add(frozenset([u, v]))
-
-    # --- 3b. Vẽ các cạnh DEFAULT (xám) CHỈ KHI chúng chưa được vẽ ---
-    for props in default_props:
-        u, v = props["u"], props["v"]
-        edge_key = frozenset([u, v])
-        
-        # Chỉ vẽ cạnh xám này nếu phiên bản vô hướng của nó
-        # CHƯA được vẽ (dưới dạng highlighted)
-        if edge_key not in drawn_undirected_edges:
-            net.add_edge(
-                u, v, 
-                title=props["title"], 
-                color=props["color"], 
-                width=props["width"],
-                arrows=props["arrows"] # sẽ là None
-            )
-            # Đánh dấu là đã vẽ (để tránh vẽ trùng 2 cạnh xám)
-            drawn_undirected_edges.add(edge_key)
-
-    html_path = "data/graph_vis.html"
-    net.save_graph(html_path)
-    return html_path
-
-# ==========================================
-# Load metrics
+# 2. UTILITIES 
 # ==========================================
 def load_metrics(metrics_path):
     if os.path.exists(metrics_path):
@@ -136,86 +55,299 @@ def load_metrics(metrics_path):
             return None
     return None
 
+def pyvis_graph(G, highlight_paths=None, best_path=None):
+    # Cấu hình đồ thị với physics tốt hơn cho dashboard
+    net = Network(height="600px", width="100%", bgcolor="#ffffff", font_color="black")
+    # net.force_atlas_2based(gravity=-50) # Tinh chỉnh physics nếu cần
+    
+    # 1. Nodes
+    for n, d in G.nodes(data=True):
+        role = d.get("role", "router")
+        color = {
+            "client": "#b8f2e6",
+            "server": "#fefbbd",
+            "firewall": "#ef8d7a",
+            "router": "#97c2fc"
+        }.get(role, "#6C6C6A")
+        
+        # Thêm icon hoặc hình dạng nếu muốn dashboard đẹp hơn (tùy chọn)
+        net.add_node(n, label=n, title=f"{n} ({role})", color=color, size=20)
+
+    # 2. Edge Properties Setup
+    edge_props = {}
+    
+    # 2a. Default Edges
+    for u, v, d in G.edges(data=True):
+        edge_key = (u, v)
+        if edge_key not in edge_props:
+            edge_props[edge_key] = {"u": u, "v": v, "color": "#E0E0E0", "width": 1, "title": str(d.get("weight", 1)), "arrows": None}
+        if (v, u) not in edge_props:
+             edge_props[(v, u)] = {"u": v, "v": u, "color": "#E0E0E0", "width": 1, "title": str(d.get("weight", 1)), "arrows": None}
+
+    # 2b. Highlight Paths
+    if highlight_paths:
+        for p in highlight_paths:
+            for a, b in zip(p[:-1], p[1:]):
+                edge_key = (a, b)
+                if edge_key in edge_props:
+                    edge_props[edge_key].update({"color": "#ff4b4b", "width": 3, "arrows": "to"})
+
+    # 2c. Best Path
+    if best_path:
+        for a, b in zip(best_path[:-1], best_path[1:]):
+            edge_key = (a, b)
+            if edge_key in edge_props:
+                edge_props[edge_key].update({"color": "#f1c40f", "width": 6, "arrows": "to"})
+
+    # 3. Draw Edges (Logic Fix)
+    drawn_undirected = set()
+    highlighted_props = [p for p in edge_props.values() if p["arrows"] is not None]
+    default_props = [p for p in edge_props.values() if p["arrows"] is None]
+
+    for props in highlighted_props:
+        net.add_edge(props["u"], props["v"], title=props["title"], color=props["color"], width=props["width"], arrows=props["arrows"])
+        drawn_undirected.add(frozenset([props["u"], props["v"]]))
+
+    for props in default_props:
+        if frozenset([props["u"], props["v"]]) not in drawn_undirected:
+            net.add_edge(props["u"], props["v"], title=props["title"], color=props["color"], width=props["width"], arrows=None)
+            drawn_undirected.add(frozenset([props["u"], props["v"]]))
+
+    # Tắt physics sau khi load để node không bị trôi (tốt cho dashboard)
+    net.toggle_physics(True) 
+    html_path = "data/graph_vis.html"
+    net.save_graph(html_path)
+    return html_path
 
 # ==========================================
-# MAIN UI
+# 3. MAIN DASHBOARD LOGIC
 # ==========================================
-st.title("🔍 Machine Learning Path Prediction Demo")
 
-G = build_random_network(15)
+# --- 0. Khởi tạo Session State ---
+if 'graph_state' not in st.session_state:
+    np.random.seed(42) 
+    st.session_state['base_G'] = build_random_network(15)
+    st.session_state['current_G'] = st.session_state['base_G'].copy()
+    st.session_state['defense_history'] = None 
+    st.session_state['graph_state'] = True
 
-metrics = load_metrics(METRICS_PATH)
+# --- A. Sidebar: Control Panel ---
+with st.sidebar:
+    st.title("🎛️ Control Panel")
+    
+    # --- PHẦN 1: QUẢN LÝ TOPOLOGY (HỆ THỐNG) ---
+    with st.container(border=True):
+        st.caption("🌐 Network Topology")
+        # Nút Reset tách biệt hẳn ra ngoài
+        if st.button("🔄 New Random Graph", use_container_width=True):
+            st.session_state['base_G'] = build_random_network(15) # Tạo mới hoàn toàn
+            st.session_state['current_G'] = st.session_state['base_G'].copy()
+            st.session_state['defense_history'] = None
+            st.rerun()
+            
+        # Lấy dữ liệu đồ thị hiện tại
+        G = st.session_state['current_G']
+        nodes = list(G.nodes())
+        clients = [n for n in nodes if G.nodes[n].get('role') == 'client']
+        servers = [n for n in nodes if G.nodes[n].get('role') == 'server']
+        # Các node có thể đặt firewall (trừ Client/Server để demo rõ hơn)
+        potential_firewalls = [n for n in nodes if G.nodes[n].get('role') not in ['client', 'server']]
 
-left, right = st.columns([1.5, 2.5])
+    # --- BẮT ĐẦU FORM CẤU HÌNH CHÍNH ---
+    with st.form("simulation_form"):
+        
+        # --- PHẦN 2: KỊCH BẢN TẤN CÔNG (RED TEAM) ---
+        st.markdown("### ⚔️ Attack Scenario")
+        
+        col_src, col_dst = st.columns(2)
+        with col_src:
+            c_idx = 0 if len(clients) > 0 else None
+            src = st.selectbox("Source", clients, index=c_idx, help="Attacker Node")
+        with col_dst:
+            s_idx = len(servers) - 1 if len(servers) > 0 else None
+            dst = st.selectbox("Target", servers, index=s_idx, help="Victim Node")
+            
+        # Gom các cài đặt thuật toán vào Expander cho gọn
+        with st.expander("⚙️ Algorithm Settings"):
+            st.caption("Tinh chỉnh tham số mô hình AI")
+            k = st.slider("Top-K Paths", 1, 10, 3) 
+            mode = st.radio("Selection Strategy", ["softmax", "argmax"], 
+                           captions=["Mô phỏng ngẫu nhiên (Hacker)", "Chọn đường tốt nhất (Robot)"])
 
+        st.divider()
 
-# ------------------------------
-# LEFT PANEL — SETTINGS
-# ------------------------------
-with left:
-    st.header("⚙️ Pre-configurations")
-
-    nodes = list(G.nodes())
-    clients = [node for node in nodes if G.nodes[node].get('role') == 'client']
-    servers = [node for node in nodes if G.nodes[node].get('role') == 'server']
-    src = st.selectbox("Source node (client)", clients, index=0)
-    dst = st.selectbox("Target node (server)", servers, index=len(servers) - 1)
-
-    k = st.slider("Top-K paths", 1, 10, 4)
-
-    st.write("---")
-
-    st.subheader("📊 Model Metrics")
-    if metrics:
-        st.metric("Accuracy", f"{metrics.get('accuracy',0):.3f}")
-        st.metric("F1-score", f"{metrics.get('f1',0):.3f}")
-    else:
-        st.info("Chưa có metrics trong models/metrics.json")
-
-
-# ------------------------------
-# RIGHT PANEL — VISUALIZATION
-# ------------------------------
-with right:
-    st.header("🔎 ML Path Prediction Visualization")
-
-    if src == dst:
-        st.warning("Source và Target phải khác nhau")
-    else:
-        result = predict_attack(G, src, dst, k=k, mode="sofmax")
-
-        if result is None:
-            st.error("Không tìm thấy đường đi.")
+        # --- PHẦN 3: KỊCH BẢN PHÒNG THỦ (BLUE TEAM) ---
+        st.markdown("### 🛡️ Defense Strategy")
+        
+        # Hiển thị trạng thái hiện tại rõ ràng
+        current_defense = st.session_state.get('defense_history', None)
+        
+        if current_defense:
+            st.warning(f"🔒 Active Firewall at: **{current_defense}**", icon="⚠️")
+            # Logic hiển thị danh sách chọn
+            defense_options = ["Keep Current"] + ["🛑 REMOVE FIREWALL"] + [n for n in potential_firewalls if n != current_defense]
+            idx_def = 0 
         else:
-            paths = result["paths"]
-            rf_probs = result["rf_probs"]
-            soft_probs = result["softmax_probs"]
-            best_path = result["best_path"]
+            st.info("✅ No Active Firewall", icon="🟢")
+            defense_options = ["None"] + potential_firewalls
+            idx_def = 0
 
-            # Top-K candidate listing
-            st.subheader("Danh sách Top-K Paths")
+        defense_node_selection = st.selectbox(
+            "Deploy/Remove Firewall:", 
+            defense_options,
+            index=idx_def,
+            help="Đặt Firewall sẽ tăng trọng số cạnh (+50), buộc kẻ tấn công đổi hướng."
+        )
 
-            for i, p in enumerate(paths):
-                col1, col2, col3 = st.columns([4, 1, 1])
+        st.markdown("") # Spacer
+        submitted = st.form_submit_button("🚀 RUN SIMULATION", type="primary", use_container_width=True)
 
-                with col1:
-                    st.write(f"**#{i+1}:** {' → '.join(p)}")
 
-                with col2:
-                    st.metric("RF Prob", f"{rf_probs[i]:.3f}")
+    # --- XỬ LÝ LOGIC KHI NHẤN NÚT RUN ---
+    if submitted:
+        # 1. Xử lý logic phòng thủ (Blue Team)
+        # Chỉ chạy logic nếu người dùng không chọn "Keep Current" (Giữ nguyên)
+        if defense_node_selection != "Keep Current":
+            
+            # Reset về đồ thị gốc sạch sẽ để tính toán lại từ đầu
+            G = st.session_state['base_G'].copy()
+            
+            # Case A: Gỡ bỏ Firewall
+            if defense_node_selection == "None" or defense_node_selection == "🛑 REMOVE FIREWALL":
+                st.session_state['defense_history'] = None
+                if current_defense is not None:
+                    st.toast("Firewall has been removed.", icon="🔓")
+            
+            # Case B: Thêm Firewall Mới
+            else:
+                target_node = defense_node_selection
+                # Tăng trọng số cực mạnh
+                for u, v in G.edges(target_node):
+                    G[u][v]['weight'] = G[u][v].get('weight', 1) + 50 
+                    
+                # 2. Đổi Role node thành Firewall (Logic hiển thị) 
+                G.nodes[target_node]['role'] = 'firewall' 
+                
+                st.session_state['defense_history'] = target_node
+                st.toast(f"Firewall deployed at {target_node}!", icon="🛡️")
 
-                with col3:
-                    st.metric("Softmax", f"{soft_probs[i]:.3f}")
+            # Lưu trạng thái mới
+            st.session_state['current_G'] = G
 
-            # Best path (ML predicted)
-            st.write("---")
-            st.subheader("🎯 Best Path (ML Prediction)")
-            st.success(" → ".join(best_path))
+        # 2. Chạy logic tấn công (Red Team)
+        if src and dst and src != dst:
+            # Lưu ý: dùng k_val_input từ slider trong form
+            result = predict_attack(G, src, dst, k=k, mode=mode)
+        else:
+             st.error("Invalid Source or Target.")
+             result = None
+        
+# --- B. Load Metrics ---
+metrics = load_metrics(METRICS_PATH)
+acc = metrics.get('accuracy', 0) if metrics else 0
+f1 = metrics.get('f1', 0) if metrics else 0
 
-            # Draw interactive graph
-            # ===============================
-            html_file = pyvis_graph(G, highlight_paths=paths, best_path=best_path)
-            components.html(open(html_file, "r", encoding="utf-8").read(), height=650)
+# --- C. Main Content ---
+st.title("🛡️ Network Path Prediction System")
 
-st.write("---")
-st.caption("Demo built with ML + Pathfinding + Streamlit 🔥")
+# Run logic
+if submitted or True: # Chạy lần đầu mặc định
+    if src == dst:
+        st.error("⚠️ Source và Target phải khác nhau!")
+        result = None
+    else:
+        result = predict_attack(G, src, dst, k=k, mode=mode)
+
+# --- D. KPI Row (Top Dashboard) ---
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric(label="Model Accuracy", value=f"{acc:.1%}", delta="Baseline")
+with col2:
+    st.metric(label="Model F1-Score", value=f"{f1:.3f}")
+with col3:
+    if result:
+        # Lấy xác suất cao nhất
+        best_prob = max(result["rf_probs"])
+        st.metric(label="Highest Threat Prob", value=f"{best_prob:.1%}", delta_color="inverse")
+    else:
+        st.metric(label="Highest Threat Prob", value="N/A")
+with col4:
+    if result:
+        st.metric(label="Paths Analyzed", value=len(result["paths"]))
+    else:
+        st.metric(label="Paths Analyzed", value="0")
+
+st.divider()
+
+# --- E. Visualization Split View ---
+if result:
+    # Chia layout: 70% Graph (Trái), 30% Details (Phải)
+    col_viz, col_data = st.columns([2.2, 1]) 
+    
+    # 1. Cột Trái: Đồ thị (Giữ nguyên)
+    with col_viz:
+        st.subheader("🌐 Network Topology Map")
+        html_file = pyvis_graph(G, highlight_paths=result["paths"], best_path=result["best_path"])
+        components.html(open(html_file, "r", encoding="utf-8").read(), height=610, scrolling=False)
+
+    # 2. Cột Phải: Phân tích chi tiết (ĐÃ FIX LỖI HIỂN THỊ)
+    with col_data:
+        st.subheader("🎯 Predicted Attack Path")
+        best_p_str = " → ".join(result["best_path"])
+        st.info(f"**Best Route:**\n\n{best_p_str}")
+
+        st.subheader("📊 Path Ranking")
+        
+        # Chuyển đổi dữ liệu thành DataFrame
+        df_data = []
+        for i, p in enumerate(result["paths"]):
+            path_str = " → ".join(p)
+            
+            # Tính toán trọng số
+            total_weight = sum([G[u][v].get("weight", 0) for u, v in zip(p[:-1], p[1:])])
+
+            # --- SỬA LỖI TẠI ĐÂY: Tăng giới hạn ký tự từ 25 lên 60 ---
+            if len(path_str) > 60:
+                short_path = f"{p[0]}...{p[-1]} ({len(p)} hops)"
+            else:
+                short_path = path_str
+            # ---------------------------------------------------------
+                
+            df_data.append({
+                "Rank": i+1,
+                "Weight": total_weight,
+                "Path": short_path,           # Hiển thị (có thể rút gọn)
+                "Full_Path": path_str,        # Lưu đường dẫn gốc để làm tooltip
+                "Threat Score": result['softmax_probs'][i],
+            })
+        
+        df = pd.DataFrame(df_data)
+        
+        # Hiển thị bảng tương tác
+        st.dataframe(
+            df, 
+            hide_index=True,
+            column_config={
+                "Rank": st.column_config.NumberColumn(
+                    "Rank", format="#%d", width="small"
+                ),
+                "Weight": st.column_config.NumberColumn(
+                    "Total Weight", 
+                    format="%d", 
+                    width="small"
+                ),
+                "Path": st.column_config.TextColumn(
+                    "Route", 
+                    width="medium",
+                    help="Đường đi cụ thể (Rê chuột để xem chi tiết nếu bị cắt)" 
+                ),
+                "Full_Path": None, # Ẩn cột này đi, chỉ dùng để logic
+                "Threat Score": st.column_config.ProgressColumn(
+                    "Threat Score",
+                    format="%.3f", 
+                    min_value=0,
+                    max_value=1,
+                ),
+            },
+            use_container_width=True
+        )

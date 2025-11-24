@@ -13,7 +13,7 @@ def load_model(model_path=MODEL_PATH):
         print(f"[ERROR] Canot load model: {e}")
         return None
 
-def predict_attack(graph, src, dst, k=4, mode="softmax"):
+def predict_attack(graph, src, dst, k=3, mode="softmax"):
     # 0. load model
     model = load_model()
     if model is None:
