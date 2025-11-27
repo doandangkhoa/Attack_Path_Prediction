@@ -1,12 +1,13 @@
 import numpy as np
 from collections import Counter
 
-def extract_features(candidate_path, graph, shortest_path_len, role_weights=None):
+def extract_features(candidate_path, graph, shortest_path_len, rank = 0, role_weights=None):
     """
     Trích xuất đặc trưng cho một đường đi trong đồ thị.
     """
     if not candidate_path or len(candidate_path) < 2:
         return {
+            'rank': 0,
             'path_length': len(candidate_path),
             'total_weight': 0.0,
             'avg_weight': 0.0,
@@ -30,8 +31,8 @@ def extract_features(candidate_path, graph, shortest_path_len, role_weights=None
     if role_weights is None:
         role_weights = {
             'client': 1,
-            'server': 5,
-            'firewall': -3,
+            'server': 10,
+            'firewall': -10,
             'router': 0,
             'unknown': 0
         }
@@ -55,6 +56,7 @@ def extract_features(candidate_path, graph, shortest_path_len, role_weights=None
     )
 
     return {
+        'rank':rank,
         'path_length': len(candidate_path),
         'total_weight': total_weight,
         'avg_weight': avg_weight,

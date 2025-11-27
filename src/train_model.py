@@ -1,9 +1,11 @@
 import pandas as pd
 import os
 import json
+from collections import Counter
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (accuracy_score, f1_score, confusion_matrix, classification_report)
+from imblearn.under_sampling import RandomUnderSampler
 import joblib
 
 
@@ -12,6 +14,7 @@ def train_baseline(csv_path="data/generated_paths_full.csv"):
     df = pd.read_csv(csv_path)
     
     trained_features = [
+        "rank",
         "path_length",
         "total_weight",
         "avg_weight",
@@ -24,7 +27,12 @@ def train_baseline(csv_path="data/generated_paths_full.csv"):
     
     X = df[trained_features]
     y = df["label"]
-
+    # print(f"📊 Trước khi cân bằng: {sorted(Counter(y).items())}")
+    
+    # rus = RandomUnderSampler(random_state=42)
+    # X_resampled, y_resampled = rus.fit_resample(X, y)
+    
+    # print(f"⚖️ Sau khi cân bằng: {sorted(Counter(y_resampled).items())}")
     # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y,
@@ -73,7 +81,8 @@ def train_baseline(csv_path="data/generated_paths_full.csv"):
         "accuracy": float(acc),
         "f1": float(f1),
         "confusion_matrix": cm.tolist(),
-        "feature_importance": feat_importance
+        "feature_importance": feat_importance,
+        "Classification Report:": classification_report(y_test, y_pred)
     }
 
     with open("models/metrics.json", "w") as f:

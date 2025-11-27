@@ -13,7 +13,7 @@ def load_model(model_path=MODEL_PATH):
         print(f"[ERROR] Canot load model: {e}")
         return None
 
-def predict_attack(graph, src, dst, k=3, mode="softmax"):
+def predict_attack(graph, src, dst, k=3, rank = 0, mode="softmax"):
     # 0. load model
     model = load_model()
     if model is None:
@@ -30,10 +30,11 @@ def predict_attack(graph, src, dst, k=3, mode="softmax"):
     rf_probs = []
     features_list = []
     # 2. Extract features + model predict
-    for p in paths:
-        feat = extract_features(p, graph, shortest_len)
+    for i, p in enumerate(paths):
+        feat = extract_features(p, graph, shortest_len, rank=i + 1)
         features_list.append(feat)
         X = np.array([[
+            feat["rank"],
             feat["path_length"],
             feat["total_weight"],
             feat["avg_weight"],
@@ -61,6 +62,7 @@ def predict_attack(graph, src, dst, k=3, mode="softmax"):
     
     # 5. Return everything
     return {
+        "rank": rank,
         "paths": paths,
         "rf_probs": rf_probs,
         "softmax_probs": soft_probs,

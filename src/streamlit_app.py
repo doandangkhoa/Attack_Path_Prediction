@@ -1,10 +1,13 @@
 import streamlit as st
 import numpy as np
-import pandas as pd # Thêm pandas để hiển thị bảng đẹp hơn
+import pandas as pd 
 from pyvis.network import Network
 import streamlit.components.v1 as components
+import plotly.graph_objects as go
 import json
 import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from src.network_builder import build_random_network
 from src.predict_attack import predict_attack
 
@@ -126,7 +129,7 @@ def pyvis_graph(G, highlight_paths=None, best_path=None):
 # --- 0. Khởi tạo Session State ---
 if 'graph_state' not in st.session_state:
     np.random.seed(42) 
-    st.session_state['base_G'] = build_random_network(15)
+    st.session_state['base_G'] = build_random_network(15, seed=42)
     st.session_state['current_G'] = st.session_state['base_G'].copy()
     st.session_state['defense_history'] = None 
     st.session_state['graph_state'] = True
@@ -170,7 +173,7 @@ with st.sidebar:
         # Gom các cài đặt thuật toán vào Expander cho gọn
         with st.expander("⚙️ Algorithm Settings"):
             st.caption("Tinh chỉnh tham số mô hình AI")
-            k = st.slider("Top-K Paths", 1, 10, 3) 
+            k = st.slider("Top-K Paths", 1, 10, 5) 
             mode = st.radio("Selection Strategy", ["softmax", "argmax"], 
                            captions=["Mô phỏng ngẫu nhiên (Hacker)", "Chọn đường tốt nhất (Robot)"])
 
@@ -236,7 +239,6 @@ with st.sidebar:
 
         # 2. Chạy logic tấn công (Red Team)
         if src and dst and src != dst:
-            # Lưu ý: dùng k_val_input từ slider trong form
             result = predict_attack(G, src, dst, k=k, mode=mode)
         else:
              st.error("Invalid Source or Target.")
@@ -290,64 +292,103 @@ if result:
         html_file = pyvis_graph(G, highlight_paths=result["paths"], best_path=result["best_path"])
         components.html(open(html_file, "r", encoding="utf-8").read(), height=610, scrolling=False)
 
-    # 2. Cột Phải: Phân tích chi tiết (ĐÃ FIX LỖI HIỂN THỊ)
     with col_data:
-        st.subheader("🎯 Predicted Attack Path")
-        best_p_str = " → ".join(result["best_path"])
-        st.info(f"**Best Route:**\n\n{best_p_str}")
-
-        st.subheader("📊 Path Ranking")
+        st.subheader("🎯 Attack Strategy Analysis")
         
-        # Chuyển đổi dữ liệu thành DataFrame
+        chosen_idx = result["chosen_index"]
+        best_feat = result["features"][chosen_idx]
+        all_feats = result["features"]
+        
+        # --- 1. ĐÁNH GIÁ RỦI RO (RISK METER) ---
+        rf_conf = result['rf_probs'][chosen_idx]
+        
+        if rf_conf > 0.8:
+            risk_label, risk_color, icon = "CRITICAL", "#ff4b4b", "🔥" # Đỏ
+        elif rf_conf > 0.5:
+            risk_label, risk_color, icon = "HIGH", "#ffa421", "⚠️"     # Cam
+        else:
+            risk_label, risk_color, icon = "MEDIUM", "#0083c9", "🛡️"   # Xanh
+            
+        st.markdown(f"""
+        <div style="padding: 15px; border-radius: 8px; background-color: #f0f2f6; border-left: 6px solid {risk_color}; margin-bottom: 20px;">
+            <h3 style="margin:0; color: {risk_color}; font-size: 24px;">{icon} {risk_label} THREAT</h3>
+            <p style="margin: 5px 0 0 0; font-size: 16px;">AI Confidence: <b>{rf_conf:.1%}</b></p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # --- 2. HIỂN THỊ ROUTE (MỚI THÊM VÀO) ---
+        st.markdown("#### 📍 Execution Path")
+        path_str = " → ".join(result["best_path"])
+        # Dùng st.code để làm nổi bật đường dẫn
+        st.code(path_str, language="text")
+
+        # --- 3. GIẢI THÍCH TẠI SAO (INSIGHTS) ---
+        st.markdown("#### 🔍 AI Reasoning")
+        
+        # A. Phân tích về Weight (Hiệu quả)
+        other_weights = [f['total_weight'] for i, f in enumerate(all_feats) if i != chosen_idx]
+        avg_weight = np.mean(other_weights) if other_weights else best_feat['total_weight']
+        weight_diff = avg_weight - best_feat['total_weight']
+        
+        if weight_diff > 5:
+            st.write(f"⚡ **Efficiency:** This path is significantly faster/cheaper ({weight_diff:.1f} pts) than average alternatives.")
+        elif weight_diff < -10:
+            st.write(f"🐢 **Forced Detour:** Attacker is forced to take a longer path (Cost +{abs(weight_diff):.1f}) to avoid defenses.")
+        else:
+            st.write(f"⚖️ **Balanced:** This path offers the best trade-off between cost and risk.")
+
+        # B. Phân tích về Security (Firewall/Server)
+        if best_feat['firewall_crossings'] > 0:
+            st.warning(f"🔓 **Breach:** Bypasses {best_feat['firewall_crossings']} Firewall(s).")
+        elif best_feat['role_score'] > 5:
+            st.error("🎯 **Target:** Direct access to High-Value Asset (Server).")
+        
+        # C. Phân tích Rank
+        if best_feat['rank'] == 1:
+            st.info("🥇 **Top Choice:** Mathematically the shortest path available.")
+        else:
+            st.info(f"🥈 **Strategic Shift:** Not the shortest (Rank {best_feat['rank']}), likely chosen to evade detection.")
+
+        st.divider()
+
+        # --- 4. BẢNG SO SÁNH (COMPARISON TABLE) ---
+        st.subheader("📊 Candidate Ranking")
+        
         df_data = []
         for i, p in enumerate(result["paths"]):
             path_str = " → ".join(p)
-            
-            # Tính toán trọng số
-            total_weight = sum([G[u][v].get("weight", 0) for u, v in zip(p[:-1], p[1:])])
-
-            # --- SỬA LỖI TẠI ĐÂY: Tăng giới hạn ký tự từ 25 lên 60 ---
-            if len(path_str) > 60:
-                short_path = f"{p[0]}...{p[-1]} ({len(p)} hops)"
+            if len(path_str) > 50:
+                display_path = f"{p[0]} ... {p[-1]} ({len(p)} hops)"
             else:
-                short_path = path_str
-            # ---------------------------------------------------------
+                display_path = path_str
                 
+            w = sum([G[u][v].get("weight", 0) for u, v in zip(p[:-1], p[1:])])
+            is_selected = "✅" if i == chosen_idx else ""
+            
             df_data.append({
+                "Select": is_selected,
                 "Rank": i+1,
-                "Weight": total_weight,
-                "Path": short_path,           # Hiển thị (có thể rút gọn)
-                "Full_Path": path_str,        # Lưu đường dẫn gốc để làm tooltip
+                "Route": display_path,
+                "Full_Route": path_str,
+                "Weight": w,
                 "Threat Score": result['softmax_probs'][i],
+                "RF Prob": result['rf_probs'][i]
             })
         
         df = pd.DataFrame(df_data)
         
-        # Hiển thị bảng tương tác
         st.dataframe(
             df, 
             hide_index=True,
             column_config={
-                "Rank": st.column_config.NumberColumn(
-                    "Rank", format="#%d", width="small"
-                ),
-                "Weight": st.column_config.NumberColumn(
-                    "Total Weight", 
-                    format="%d", 
-                    width="small"
-                ),
-                "Path": st.column_config.TextColumn(
-                    "Route", 
-                    width="medium",
-                    help="Đường đi cụ thể (Rê chuột để xem chi tiết nếu bị cắt)" 
-                ),
-                "Full_Path": None, # Ẩn cột này đi, chỉ dùng để logic
-                "Threat Score": st.column_config.ProgressColumn(
-                    "Threat Score",
-                    format="%.3f", 
-                    min_value=0,
-                    max_value=1,
-                ),
+                "Select": st.column_config.TextColumn("Select", width="small"),
+                "Rank": st.column_config.NumberColumn("Rank", format="#%d", width="small"),
+                "Route" : st.column_config.TextColumn("Candidate Route",width="medium", help="Đường đi cụ thể"),
+                "Full_Route": None, # hidden
+                "Weight": st.column_config.NumberColumn("Weight", format="%d", width="small"),
+                "Threat Score": st.column_config.ProgressColumn("Threat Score", format="%.2f", min_value=0, max_value=1),
+                "RF prob": st.column_config.NumberColumn("Raw Prob", format="%.2f")
             },
             use_container_width=True
         )
+

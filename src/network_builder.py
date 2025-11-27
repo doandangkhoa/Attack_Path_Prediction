@@ -2,31 +2,7 @@ import networkx as nx
 import random
 from collections import Counter
 
-def assign_roles(G, role_distribution=None):
-    """
-    Gán role và security_level cho từng node trong đồ thị G.
-    """
-    random.seed(42)
-    nodes = list(G.nodes())
-
-    if role_distribution is None:
-        role_distribution = {
-            'client': 0.4,
-            'server': 0.15,       # bao gồm cả database
-            'firewall': 0.2,
-            'router': 0.25
-        }
-    roles = list(role_distribution.keys())
-    probs = list(role_distribution.values())
-    total = sum(probs)
-    probs = [p / total for p in probs]
-
-    for node in nodes:
-        role = random.choices(roles, weights=probs, k=1)[0]
-        G.nodes[node]['role'] = role
-
-
-def build_random_network(n_nodes=15, edge_prob=0.4, weight_range=(1, 11), firewall_penalty=50):
+def build_random_network(n_nodes=15, edge_prob=0.4, weight_range=(1, 11), firewall_penalty=50, seed=None):
     """
     Tạo đồ thị mạng phân cấp (Hub-based):
     - Sử dụng Erdos-Renyi để tạo khung xương.
@@ -34,9 +10,12 @@ def build_random_network(n_nodes=15, edge_prob=0.4, weight_range=(1, 11), firewa
     - Node ít kết nối -> Client/Server (Edge).
     - Đảm bảo Router/Firewall luôn nằm trên đường đi chính.
     """
+    # xử lí seed
+    if seed is not None:
+        random.seed(seed)
+        
     # 1. Tạo khung xương đồ thị vô hướng (Undirected) để tính toán Degree
-    # edge_prob=0.3 giúp tạo đồ thị đủ dày đặc
-    G_temp = nx.erdos_renyi_graph(n=n_nodes, p=edge_prob, seed=42)
+    G_temp = nx.erdos_renyi_graph(n=n_nodes, p=edge_prob, seed=seed)
     
     # Đảm bảo đồ thị liên thông (không bị đứt đoạn)
     while not nx.is_connected(G_temp):
@@ -114,45 +93,7 @@ def build_random_network(n_nodes=15, edge_prob=0.4, weight_range=(1, 11), firewa
     return G_final
 
 
-def build_sample_network():
-    """
-    Tạo đồ thị mẫu đơn giản để kiểm thử thuật toán và mô hình.
-    """
-    graph = {
-        'A': {'B': 2, 'C': 5},
-        'B': {'C': 1, 'D': 4},
-        'C': {'D': 2, 'E': 3},
-        'D': {'F': 1},
-        'E': {'F': 5},
-        'F': {}
-    }
-    G = nx.DiGraph()
-    for u in graph:
-        for v, w in graph[u].items():
-            G.add_edge(u, v, weight=w)
-    assign_roles(G)
-    return G
-
-def display_network_info(G, name=""):
-    print(f"\n--- Network: {name} ---")
-    print("Nodes with roles and security levels:")
-    role_counts = Counter()
-    for node, data in G.nodes(data=True):
-        role = data.get('role', 'unknown')
-        sec = data.get('security_level', '?')
-        role_counts[role] += 1
-        print(f"  {node}: role={role}, security_level={sec}")
-    print("Role distribution:", dict(role_counts))
-
-    print("\nEdges with weights:")
-    for u, v, d in G.edges(data=True):
-        print(f"  {u} -> {v}, weight={d['weight']}")
-
 if __name__ == "__main__":
     scenarios = {
-        "sample": build_sample_network(),
-        "random": build_random_network(n_nodes=20),
+        "random": build_random_network(n_nodes=15),
     }
-
-    for name, G in scenarios.items():
-        display_network_info(G, name)

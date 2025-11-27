@@ -1,24 +1,26 @@
 {
-    "accuracy": 0.805,
-    "f1": 0.6422018348623854,
+    "accuracy": 0.8767013610888711,
+    "f1": 0.7137546468401487,
     "confusion_matrix": [
         [
-            630,
-            120
+            903,
+            96
         ],
         [
-            75,
-            175
+            58,
+            192
         ]
     ],
     "feature_importance": {
-        "deviation_from_shortest": 0.32619606765006043,
-        "total_weight": 0.17082776956166076,
-        "std_weight": 0.15169899954777483,
-        "role_score": 0.11727308568151508,
-        "avg_weight": 0.091894356710945,
-        "role_entropy": 0.06920610821846938,
-        "path_length": 0.06475971496443769,
-        "firewall_crossings": 0.008143897665136906
-    }
+        "rank": 0.29079565916985206,
+        "role_score": 0.24057264191423927,
+        "deviation_from_shortest": 0.12034827204292006,
+        "std_weight": 0.11854555328716926,
+        "total_weight": 0.08456641402009243,
+        "avg_weight": 0.07148261037989584,
+        "role_entropy": 0.04704097761438957,
+        "path_length": 0.02661485177291114,
+        "firewall_crossings": 3.301979853032555e-05
+    },
+    "Classification Report:": "              precision    recall  f1-score   support\n\n           0       0.94      0.90      0.92       999\n           1       0.67      0.77      0.71       250\n\n    accuracy                           0.88      1249\n   macro avg       0.80      0.84      0.82      1249\nweighted avg       0.89      0.88      0.88      1249\n"
 }

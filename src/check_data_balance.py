@@ -14,3 +14,5 @@ def data_balancing(csv_path="data/generated_paths_full.csv"):
     plt.tight_layout()
     plt.show()
 
+if __name__ == "__main__":
+    data_balancing()
