@@ -14,6 +14,8 @@ def get_edge_attributes(link_type):
         "firewall":  {"weight": 200, "detection": 95, "privilege": 0},
         "ids":       {"weight": 80,  "detection": 90, "privilege": 0},
         "waf":       {"weight": 120, "detection": 95, "privilege": 0},
+        "vpn_connect": {"weight": 20, "detection": 30, "privilege": 0},
+        "vpn_tunnel":  {"weight": 10, "detection": 5, "privilege": 0},
         "ad_attack": {"weight": 5,   "detection": 70, "privilege": 2},
     }
     attrs = base.get(link_type, {"weight":50,"detection":20,"privilege":0})
@@ -97,6 +99,37 @@ def build_random_policy_oracle_graph(seed=None, config=None):
             G.add_edge(nid,"sw_DMZ",**get_edge_attributes("lan"))
         dmz_nodes.append(nid)
 
+    # X. VPN REMOTE ACCESS LOGIC (NEW)
+    # ---------------------
+    # Tìm node VPN Server trong danh sách DMZ
+    vpn_servers = [n for n in dmz_nodes if "VPN" in G.nodes[n].get('label', '')]
+    
+    if vpn_servers:
+        vpn_node = vpn_servers[0]
+        
+        # 1. Server VPN nối vào mạng nội bộ (Tunnel)
+        G.add_edge(vpn_node, "sw_Core", 
+                   **get_edge_attributes("vpn_tunnel"), 
+                   type="authorized", label="VPN Tunnel")
+
+        # 2. External User nối vào Server VPN (Client Connect)
+        for ext_user in internet_nodes:
+            if random.random() < 0.4: # 50% là nhân viên làm từ xa
+                # Tạo cạnh logic
+                G.add_edge(ext_user, vpn_node, 
+                           **get_edge_attributes("vpn_connect"), 
+                           type="authorized", 
+                           mfa=True, 
+                           label="VPN Access")
+                
+                # Đánh dấu label để debug
+                G.nodes[ext_user]['label'] = f"{G.nodes[ext_user]['label']} (VPN)"
+
+                # [CHAOS] Tạo trường hợp User làm lộ credentials (VPN không MFA)
+                # Giúp AI học được: Qua VPN mà không MFA là nguy hiểm
+                if random.random() < 0.2: 
+                    G[ext_user][vpn_node]['mfa'] = False
+                    G[ext_user][vpn_node]['detection'] = 80 # Dễ bị phát hiện hơn nếu log in lạ
     # ---------------------
     # 4. Application Servers
     # ---------------------
@@ -208,4 +241,20 @@ def build_random_policy_oracle_graph(seed=None, config=None):
     # AD -> SysAdmin (privilege escalation)
     G.add_edge(ad_node,sysadmin,**get_edge_attributes("auth"),type="privilege")
 
+    # 10. CHAOS: Shadow IT & Misconfigurations (New Layer)
+    # ---------------------
+    # User tự ý cắm dây mạng thẳng vào App Server/DB (Shadow IT)
+    if all_users and random.random() < 0.2: # 20% đồ thị bị lỗi này
+        bad_user = random.choice(all_users)
+        target = random.choice(target_nodes + app_nodes)
+        # Type là 'misconfig' để Policy Oracle nhận diện và phạt nặng
+        G.add_edge(bad_user, target, 
+                   weight=5, detection=0, privilege=0, type="misconfig", label="Shadow Link")
+
+    # Firewall bị bypass (DMZ nối thẳng vào Internal không qua Firewall)
+    if dmz_nodes and random.random() < 0.2:
+        src = random.choice(dmz_nodes)
+        G.add_edge(src, "sw_Core", 
+                   weight=10, detection=10, privilege=0, type="misconfig", label="Bypass FW")
+        
     return G

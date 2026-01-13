@@ -33,19 +33,17 @@ def train_baseline():
     # 1. FEATURE SELECTION (ĐÃ SỬA KHỚP VỚI EXTRACT_FEATURES)
     # ==============================
     trained_features = [
-        'rank',
-
         # --- STRUCTURE ---
         'path_length',
 
-        # --- WEIGHT (DIJKSTRA) ---
+        # --- WEIGHT ---
         'total_weight',
         'avg_weight',
         'min_weight',
         'std_weight',
         'deviation_weight',
 
-        # --- DETECTION / NOISE ---
+        # --- DETECTION ---
         'total_detection',
         'avg_detection',
         'max_detection',
@@ -53,18 +51,17 @@ def train_baseline():
         # --- ATTACK BEHAVIOR ---
         'exploit_count',
         'security_controls',
-        'firewall_crossings',
         'privilege_gain',
 
         # --- CONTEXT ---
-        'role_entropy',
         'role_score',
         'has_admin_access',
         'is_admin_source',
         'has_bastion',
         'has_mfa',
-        # --- COMPOSITE RISK ---
-        'risk_factor',
+
+        # --- COMPOSITE ---
+        'risk_factor'
     ]
 
     # Kiểm tra cột thiếu

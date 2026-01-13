@@ -71,12 +71,35 @@ def predict_attack(graph, src, dst, k=5, mode="argmax"):
     except AttributeError:
         # Fallback cho model cũ
         train_cols = [
-            "rank", "path_length", "total_weight", "avg_weight", "min_weight",
-            "deviation_weight", "std_weight", "exploit_count",
-            "firewall_crossings", "role_entropy", "role_score",
-            "has_admin_access", "is_admin_source", "risk_factor",
-            "total_detection", "avg_detection", "max_detection", "privilege_gain",
-            "security_controls", "has_bastion"
+            # --- STRUCTURE ---
+        'path_length',
+
+        # --- WEIGHT ---
+        'total_weight',
+        'avg_weight',
+        'min_weight',
+        'std_weight',
+        'deviation_weight',
+
+        # --- DETECTION ---
+        'total_detection',
+        'avg_detection',
+        'max_detection',
+
+        # --- ATTACK BEHAVIOR ---
+        'exploit_count',
+        'security_controls',
+        'privilege_gain',
+
+        # --- CONTEXT ---
+        'role_score',
+        'has_admin_access',
+        'is_admin_source',
+        'has_bastion',
+        'has_mfa',
+
+        # --- COMPOSITE ---
+        'risk_factor'
         ]
 
     for col in train_cols:

@@ -64,17 +64,17 @@ def pyvis_graph(G, highlight_paths=None, best_path=None, source=None, destinatio
         
         color_map = {
             "client":   "#74b9ff", "server":   "#ffeaa7", "switch":   "#dfe6e9",
-            "firewall": "#ff7675", "router":   "#a29bfe", "security": "#fdcb6e",
+            "firewall": "#f32828", "router":   "#a29bfe", "security": "#eb8760",
             "identity": "#6c5ce7",
         }
         bg_color = color_map.get(role, "#b2bec3") 
 
         if n == source:
             color = {"background": bg_color, "border": "#ff0000", "highlight": {"background": bg_color, "border": "#ff0000"}}
-            size = 45; border_width = 5; title = f"SOURCE: {label}"
+            size = 45; border_width = 2; title = f"SOURCE: {label}"
         elif n == destination:
             color = {"background": bg_color, "border": "#ff0000", "highlight": {"background": bg_color, "border": "#ff0000"}}
-            size = 45; border_width = 5; title = f"TARGET: {label}"
+            size = 45; border_width = 2; title = f"TARGET: {label}"
         else:
             color = bg_color; size = 25 if role not in ['switch', 'router'] else 20
             border_width = 2; title = f"{label} ({role})\nLayer: {d.get('layer','N/A')}"
@@ -139,7 +139,7 @@ def pyvis_graph(G, highlight_paths=None, best_path=None, source=None, destinatio
             u, v = best_path[i], best_path[i+1]
             
             override = {
-                "color": "#2d3436", "width": 5, "dashes": False, "arrows": "to", "shadow": True,
+                "color": "#000000", "width": 7, "dashes": False, "arrows": "to", "shadow": True,
                 # Cong nhẹ để nổi lên trên
                 "smooth": {'type': 'curvedCW', 'roundness': 0.15} 
             }
@@ -364,8 +364,10 @@ with tab1:
                 risk_label, risk_color, icon = "CRITICAL", "#d63031", "🔥"
             elif rf_conf > 0.7:
                 risk_label, risk_color, icon = "HIGH", "#e17055", "⚠️"
+            elif rf_conf > 0.5:
+                risk_label, risk_color, icon = "MEDIUM", "#e1e349", "⚠️"
             else:
-                risk_label, risk_color, icon = "LOW/SAFE", "#00b894", "🛡️"
+                risk_label, risk_color, icon = "SAFE", "#00b894", "🛡️"
             
             # Header động
             header_text = "POTENTIAL ATTACK" if current_view_idx == chosen_idx else f"ANALYZING PATH #{current_view_idx + 1}"
@@ -380,23 +382,33 @@ with tab1:
             """, unsafe_allow_html=True)
             
             st.divider()
-            st.markdown("**Candidate Paths:**")
-            
-            # Tạo dữ liệu bảng (Đã bỏ cột Hybrid)
+            # ================================
+            # RISK DIMENSION BREAKDOWN
+            # ================================
+            st.subheader("Candidate Path Overview")
+
             df_data = []
+
             for i, p in enumerate(result["paths"]):
                 feat = result["features"][i]
-                rf_prob = result['rf_probs'][i] # Chỉ lấy điểm AI
+                rf_prob = result['rf_probs'][i]
 
                 total_weight = sum([G[u][v].get("weight", 0) for u, v in zip(p[:-1], p[1:])])
-                is_selected = "⭐ SELECTED" if i == chosen_idx else f"#{i+1}"
+                is_selected = "⭐" if i == chosen_idx else f"#{i+1}"
+
+                # Các trục rủi ro chính
+                cost_score = total_weight
+                detection_score = feat.get("total_detection", 0)
+                exploit_score = feat.get("exploit_count", 0)
+                privilege_score = feat.get("privilege_gain", 0)
 
                 df_data.append({
-                    "Rank": i+1,
+                    "Rank": i + 1,
                     "Selection": is_selected,
-                    "AI Score": rf_prob,            # Tên cột mới gọn hơn
-                    "Exploit Count": feat.get("exploit_count", 0),
-                    "Privilege": feat.get("privilege_gain", 0), # Viết tắt cho gọn
+                    "AI Score": rf_prob,
+                    "Detectionable": detection_score,
+                    "Exploit": exploit_score,
+                    "Privilege": privilege_score,
                     "Cost": total_weight,
                     "Path Index": i,
                     "Full Path": " ➝ ".join(p)
@@ -404,22 +416,39 @@ with tab1:
 
             df = pd.DataFrame(df_data)
 
-            # Cấu hình bảng hiển thị (Chỉ còn 1 cột điểm)
+            # ================================
+            # HIỂN THỊ BẢNG TỔNG QUÁT
+            # ================================
             st.dataframe(
-                df[["Selection", "AI Score", "Exploit Count", "Privilege", "Cost"]],
+                df[["Rank", "AI Score", "Cost", "Detectionable", "Exploit", "Privilege"]],
                 column_config={
                     "AI Score": st.column_config.ProgressColumn(
                         "AI Threat Score",
                         format="%.2f",
                         min_value=0,
                         max_value=1,
-                        width="medium" 
+                        width="medium"
                     ),
-                    "Cost": st.column_config.NumberColumn("Effort (Cost)")
+                    "Cost": st.column_config.NumberColumn(
+                        "Effort (Cost)",
+                        help="Độ khó thực hiện. Thấp = dễ tấn công"
+                    ),
+                    "Detection": st.column_config.NumberColumn(
+                        "Detection Level",
+                        help="Mức độ bị IDS/EDR phát hiện. Cao = dễ bị phát hiện"
+                    ),
+                    "Exploit": st.column_config.NumberColumn(
+                        "Exploit Steps",
+                        help="Số bước khai thác lỗ hổng"
+                    ),
+                    "Privilege": st.column_config.NumberColumn(
+                        "Privilege Impact",
+                        help="Mức độ leo thang đặc quyền"
+                    ),
                 },
                 hide_index=True,
                 use_container_width=True,
-                height=250
+                height=300
             )
             
             # Nút xem chi tiết
@@ -439,22 +468,6 @@ with tab1:
 
         analysis = analyze_path(G, selected_path, ai_confidence=rf_conf)
 
-        # 1. Xác định màu sắc chủ đạo dựa trên Severity
-        sev = analysis['severity']
-        if sev == "CRITICAL":
-            theme_color = "#d63031" # Đỏ đậm
-            icon = "🔥"
-            bg_color = "#ffRgRg" # (Mẹo: dùng màu nhạt hơn nếu muốn)
-        elif sev == "HIGH":
-            theme_color = "#e17055" # Cam đậm
-            icon = "🚨"
-        elif sev == "MEDIUM":
-            theme_color = "#fdcb6e" # Vàng
-            icon = "⚠️"
-        else:
-            theme_color = "#00b894" # Xanh lá
-            icon = "✅"
-
         # 2. Hiển thị Card Tổng quan (HTML/CSS)
         st.markdown(f"""
         <div style="
@@ -462,15 +475,15 @@ with tab1:
             padding: 20px; 
             border-radius: 10px; 
             border: 1px solid #e0e0e0; 
-            border-left: 10px solid {theme_color}; 
+            border-left: 10px solid; 
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
             margin-bottom: 20px;
         ">
-            <h3 style="margin-top: 0; color: {theme_color}; display: flex; align-items: center;">
-                <span style="margin-right: 10px;">{icon}</span> Assessment: {sev}
+            <h3 style="margin-top: 0;display: flex; align-items: center;">
+                Summary
             </h3>
             <p style="font-size: 16px; color: #2d3436; margin-bottom: 5px;">
-                <strong>Summary:</strong> {analysis['summary']}
+                <strong> {analysis['summary']} </strong>
             </p>
             <div style="margin-top: 10px; font-size: 14px; color: #636e72;">
                 <strong>Attack Phases Involved:</strong> <span style="background-color: #f1f2f6; padding: 2px 8px; border-radius: 4px;">{', '.join(analysis['phases'])}</span>
@@ -485,7 +498,7 @@ with tab1:
         m3.metric("Total Path Cost", f"{sum(step['weight'] for step in analysis['steps'])}", help="Tổng trọng số (Độ khó) của đường đi")
 
         # 4. Bảng chi tiết từng bước (Step-by-Step Table)
-        st.subheader("👣 Step-by-Step Execution Flow")
+        st.subheader("Step-by-Step Execution Flow")
 
         rows = []
         for i, step in enumerate(analysis["steps"], 1):

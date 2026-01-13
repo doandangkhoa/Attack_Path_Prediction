@@ -7,8 +7,8 @@ import os
 # =========================
 # CONFIGURATION
 # =========================
-N_GRAPHS = 200
-SAMPLES_PER_GRAPH = 40
+N_GRAPHS = 400
+SAMPLES_PER_GRAPH = 15
 K_PATHS = 10
 OUTPUT_FILE = "data/generated_attack_paths_policy_oracle.csv"
 
@@ -113,43 +113,70 @@ def noisy_behavior(features_list):
 # =========================
 # POLICY ORACLE (LABELING)
 # =========================
-def policy_oracle(f, G, dst):
+def policy_oracle(f, G, src, dst):
     """
     Gán nhãn dựa trên RỦI RO (policy-based), không phụ thuộc actor.
-    Có stochastic boundary để tránh ML học vẹt rule.
     label: 1 = Attack / Policy Violation, 0 = Normal
+    Có stochastic boundary để tránh ML học vẹt rule.
     """
-    risk = 0
+    risk = 0.0
 
-    # --- Rule 1: Exploit
+    # --- Rule 1: Exploit usage
     if f.get("exploit_count", 0) > 0:
-        risk += 3
+        risk += 3.0
 
-    # --- Rule 2: Privilege Escalation
-    if f.get("privilege_gain", 0) >= 5:
-        risk += 2
+    # --- Rule 2: Privilege escalation
+    if f.get("privilege_gain", 0) >= 2:
+        risk += 2.0
 
-    # --- Rule 3: Crown Jewels Access (DB / Identity)
+    # --- Rule 3: Crown Jewels (DB / Identity)
     target_role = G.nodes[dst].get("role", "unknown")
     if target_role in ["database", "identity"]:
-        # Không qua Bastion → rủi ro rất cao
         if f.get("has_bastion", 0) == 0:
-            risk += 4
-        # Không có MFA → tăng rủi ro
+            risk += 3.0
         if f.get("has_mfa", 1) == 0:
-            risk += 2
+            risk += 1.5
 
-    # --- Rule 4: Anomalous Structure (đường dài, phức tạp)
-    if f.get("role_entropy", 0) > 1.5 and f.get("total_weight", 0) > 100:
-        risk += 1
+    # --- Rule 4: Structural anomaly
+    if f.get("role_entropy", 0) > 1.5 and f.get("total_weight", 0) > 120:
+        risk += 1.0
 
     # --- Rule 5: Detection footprint
     if f.get("max_detection", 0) > 7:
-        risk += 1
+        risk += 1.0
 
-    # --- STOCHASTIC BOUNDARY (CHỐNG HỌC VẸT)
-    threshold = 5
-    noise = np.random.normal(0, 0.5)
+    # --- Rule 6: External → Internal access (VPN / Misconfig)
+    src_layer = G.nodes[src].get("layer")
+    dst_layer = G.nodes[dst].get("layer")
+
+    if src_layer == "External" and dst_layer == "Internal":
+        # Dùng feature thay vì string path
+        has_vpn = f.get("has_vpn", 0)
+        has_mfa = f.get("has_mfa", 0)
+        has_bastion = f.get("has_bastion", 0)
+        is_misconfig = f.get("is_misconfig", 0)
+
+        if has_vpn:
+            if has_mfa:
+                risk += 0.5
+            else:
+                risk += 2.0
+
+            if has_bastion:
+                risk -= 0.5
+
+            if f.get("privilege_gain", 0) >= 2:
+                risk += 2.0
+
+            if is_misconfig:
+                risk += 3.0
+        else:
+            risk += 4.0
+
+    # --- STOCHASTIC BOUNDARY (ANTI-MEMORIZATION)
+    threshold = 5.0
+    noise = np.random.normal(0, 0.8)
+
     return 1 if (risk + noise) >= threshold else 0
 
 # =========================
@@ -202,7 +229,7 @@ def generate_dataset(build_graph_fn, extract_features_fn):
                 f = features_list[idx]
 
                 # 5) POLICY ORACLE (LABELING)
-                label = policy_oracle(f, G, dst)
+                label = policy_oracle(f, G, src, dst)
 
                 # 6) SAVE SAMPLE
                 f["label"] = label
