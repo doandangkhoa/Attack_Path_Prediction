@@ -1,26 +1,63 @@
 {
-    "accuracy": 0.8767013610888711,
-    "f1": 0.7137546468401487,
+    "accuracy": 0.8019726858877086,
+    "f1": 0.7823185988323603,
+    "recall": 0.9710144927536232,
+    "precision": 0.6550279329608939,
+    "optimal_threshold": 0.3445149603034129,
     "confusion_matrix": [
         [
-            903,
-            96
+            588,
+            247
         ],
         [
-            58,
-            192
+            14,
+            469
         ]
     ],
     "feature_importance": {
-        "rank": 0.29079565916985206,
-        "role_score": 0.24057264191423927,
-        "deviation_from_shortest": 0.12034827204292006,
-        "std_weight": 0.11854555328716926,
-        "total_weight": 0.08456641402009243,
-        "avg_weight": 0.07148261037989584,
-        "role_entropy": 0.04704097761438957,
-        "path_length": 0.02661485177291114,
-        "firewall_crossings": 3.301979853032555e-05
+        "role_score": 0.15851163273870048,
+        "exploit_count": 0.10707507077771725,
+        "privilege_gain": 0.09416328657132654,
+        "role_entropy": 0.09347939874192596,
+        "min_weight": 0.09251695959243897,
+        "risk_factor": 0.05904808506955016,
+        "total_weight": 0.05311233436936235,
+        "avg_weight": 0.0499184843445441,
+        "total_detection": 0.04593105246905853,
+        "has_admin_access": 0.0431132643838592,
+        "path_length": 0.04095283931134444,
+        "std_weight": 0.03659641750869776,
+        "avg_detection": 0.03561741184746998,
+        "max_detection": 0.024196564116550898,
+        "deviation_weight": 0.023494601067782075,
+        "security_controls": 0.018445524105712107,
+        "rank": 0.00932443089179734,
+        "has_bastion": 0.00493449367910339,
+        "has_mfa": 0.003990264628832501,
+        "is_admin_source": 0.003016737545246449,
+        "firewall_crossings": 0.0025611462389796107
     },
-    "Classification Report:": "              precision    recall  f1-score   support\n\n           0       0.94      0.90      0.92       999\n           1       0.67      0.77      0.71       250\n\n    accuracy                           0.88      1249\n   macro avg       0.80      0.84      0.82      1249\nweighted avg       0.89      0.88      0.88      1249\n"
+    "feature_names": [
+        "rank",
+        "path_length",
+        "total_weight",
+        "avg_weight",
+        "min_weight",
+        "std_weight",
+        "deviation_weight",
+        "total_detection",
+        "avg_detection",
+        "max_detection",
+        "exploit_count",
+        "security_controls",
+        "firewall_crossings",
+        "privilege_gain",
+        "role_entropy",
+        "role_score",
+        "has_admin_access",
+        "is_admin_source",
+        "has_bastion",
+        "has_mfa",
+        "risk_factor"
+    ]
 }

@@ -1,109 +1,249 @@
-# generating simular data of attacker for train baseline
-import csv
 import random
-import os
-import math
 import numpy as np
 import pandas as pd
-from src.pathfinding.k_shortest_paths import top_k_shortest_paths
-from src.network_builder import build_random_network
-from src.feature_extractor import extract_features
+import networkx as nx
+import os
 
-OUTPUT_FILE = "data/generated_paths_full.csv"
+# =========================
+# CONFIGURATION
+# =========================
 N_GRAPHS = 200
-SAMPLES_PER_GRAPH = 5
-K_PATHS = 5
+SAMPLES_PER_GRAPH = 40
+K_PATHS = 10
+OUTPUT_FILE = "data/generated_attack_paths_policy_oracle.csv"
 
+# =========================
+# UTILITY
+# =========================
 def softmax(x):
-    # nomolize outputs to prohibility distribution
-    # purpose : make data more diverse for training
-    e_x = np.exp(x - np.max(x)) # lấy tất cả phần tử trừ đi phần tử max để tránh tràn số vì hàm e mũ có thể rất lớn
-                                # vẫn giữ được tỉ lệ xác suất giữa các phần tử  
+    e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()
 
+def path_weight(path, G):
+    return sum(G[u][v].get("weight", 1000) for u, v in zip(path[:-1], path[1:]))
 
-def attacker_policy(features_list, alpha=1.5, beta=1.0, gamma=1.0, rank_w=1.5, noise=0.1, temperature=0.1):
+def is_valid_endpoint(G, node):
+    role = G.nodes[node].get("role", "")
+    return role not in ["firewall", "switch", "router", "security", "gateway"]
+
+def select_attack_sources(G):
+    nodes = []
+    for n, d in G.nodes(data=True):
+        if not is_valid_endpoint(G, n): 
+            continue
+        role = d.get("role", "")
+        layer = d.get("layer", "")
+        if layer == "External" and role == "client":
+            nodes.append(n)
+        if role == "client":
+            nodes.append(n)
+    return list(set(nodes))
+
+def select_attack_targets(G):
+    targets = []
+    for n, d in G.nodes(data=True):
+        if not is_valid_endpoint(G, n):
+            continue
+        role = d.get("role", "")
+        label = str(d.get("label", "")).lower()
+        if role in ["server", "identity", "database"]:
+            targets.append(n)
+        elif "admin" in label:
+            targets.append(n)
+    return list(set(targets))
+
+# =========================
+# PATHFINDING
+# =========================
+def top_k_shortest_paths(G, src, dst, k=5):
+    try:
+        return list(nx.shortest_simple_paths(G, src, dst, weight="weight"))[:k]
+    except:
+        return []
+
+# =========================
+# BEHAVIOR MODELS (NO LABELING)
+# =========================
+def attacker_behavior(features_list, mode="random"):
+    """
+    Chỉ chọn path theo chiến thuật. KHÔNG gán nhãn.
+    """
+    if mode == "random":
+        mode = random.choice(["stealth", "aggressive", "privilege"])
+
+    if mode == "stealth":
+        w_cost, w_exploit, w_priv, w_detect = 0.2, 6.0, 4.0, 8.0
+    elif mode == "aggressive":
+        w_cost, w_exploit, w_priv, w_detect = 0.8, 12.0, 5.0, 0.5
+    elif mode == "privilege":
+        w_cost, w_exploit, w_priv, w_detect = 0.4, 6.0, 15.0, 3.0
+
     scores = []
     for f in features_list:
-        score = (-alpha * f["total_weight"] 
-                 - beta * f["path_length"] 
-                 + gamma * f["role_score"] 
-                 + rank_w * (1 / f["rank"])
-                 + random.gauss(0, noise))
+        total_w = f.get("total_weight", 1000)
+        exploit = f.get("exploit_count", 0)
+        priv = f.get("privilege_gain", 0)
+        detect = f.get("max_detection", 0)
+
+        score = (
+            - w_cost * total_w
+            + w_exploit * exploit
+            + w_priv * priv
+            - w_detect * detect
+        )
         scores.append(score)
-    
-    # làm nhọn phân phối xác suất ==> model dễ nhận biết hơn
-    scores = np.array(scores) / temperature
-    # convert real value to prohibility
+
     probs = softmax(np.array(scores))
-    return probs # prohibility np array of paths
+    idx = np.random.choice(len(features_list), p=probs)
+    return idx, mode
 
+def user_behavior(features_list):
+    """
+    User thường chọn đường ngắn/đơn giản.
+    """
+    top_n = min(3, len(features_list))
+    return random.randint(0, top_n - 1)
 
-def generate_dataset():
+def noisy_behavior(features_list):
     """
-    Sinh dữ liệu huấn luyện mô phỏng hành vi attacker bằng policy softmax.
+    Actor nhiễu: chọn hoàn toàn ngẫu nhiên.
     """
+    return random.randint(0, len(features_list) - 1)
+
+# =========================
+# POLICY ORACLE (LABELING)
+# =========================
+def policy_oracle(f, G, dst):
+    """
+    Gán nhãn dựa trên RỦI RO (policy-based), không phụ thuộc actor.
+    Có stochastic boundary để tránh ML học vẹt rule.
+    label: 1 = Attack / Policy Violation, 0 = Normal
+    """
+    risk = 0
+
+    # --- Rule 1: Exploit
+    if f.get("exploit_count", 0) > 0:
+        risk += 3
+
+    # --- Rule 2: Privilege Escalation
+    if f.get("privilege_gain", 0) >= 5:
+        risk += 2
+
+    # --- Rule 3: Crown Jewels Access (DB / Identity)
+    target_role = G.nodes[dst].get("role", "unknown")
+    if target_role in ["database", "identity"]:
+        # Không qua Bastion → rủi ro rất cao
+        if f.get("has_bastion", 0) == 0:
+            risk += 4
+        # Không có MFA → tăng rủi ro
+        if f.get("has_mfa", 1) == 0:
+            risk += 2
+
+    # --- Rule 4: Anomalous Structure (đường dài, phức tạp)
+    if f.get("role_entropy", 0) > 1.5 and f.get("total_weight", 0) > 100:
+        risk += 1
+
+    # --- Rule 5: Detection footprint
+    if f.get("max_detection", 0) > 7:
+        risk += 1
+
+    # --- STOCHASTIC BOUNDARY (CHỐNG HỌC VẸT)
+    threshold = 5
+    noise = np.random.normal(0, 0.5)
+    return 1 if (risk + noise) >= threshold else 0
+
+# =========================
+# MAIN GENERATOR (POLICY ORACLE ARCH)
+# =========================
+def generate_dataset(build_graph_fn, extract_features_fn):
     dataset = []
-    for graph_idx in range(N_GRAPHS):
-        current_n_nodes = random.randint(15, 25)
-        graph = build_random_network(n_nodes=current_n_nodes, seed=None)
-        nodes = list(graph.nodes())
-        # filter target role
-        clients = [node for node in nodes if graph.nodes[node].get('role') == 'client']
-        servers = [node for node in nodes if graph.nodes[node].get('role') == 'server']
-        if not clients or not servers:
+    print(f"🚀 Generating dataset with Policy Oracle ({N_GRAPHS} graphs)...")
+
+    for _ in range(N_GRAPHS):
+        # 1) ENVIRONMENT
+        G = build_graph_fn(seed=None)
+
+        sources = select_attack_sources(G)
+        targets = select_attack_targets(G)
+        if not sources or not targets:
             continue
+
         for _ in range(SAMPLES_PER_GRAPH):
-            # initialize 
-            src = random.choice(clients)
-            dst = random.choice(servers)
-            
-            candidates = top_k_shortest_paths(graph, src, dst, k=K_PATHS)
-            if not candidates:
+            src = random.choice(sources)
+            dst = random.choice(targets)
+            if src == dst:
                 continue
-            
-            shortest_len = len(candidates[0])
 
-            # Trích xuất đặc trưng cho từng đường
-            features_list = []
-            for rank, p in enumerate(candidates):
-                # Truyền rank (bắt đầu từ 1) và role_weights vào
-                feat = extract_features(p, graph, shortest_len, rank=rank+1)
-                features_list.append(feat)
-            
-            # strategic 
-            probs = attacker_policy(features_list)
+            try:
+                # 2) CANDIDATE PATHS
+                candidates = top_k_shortest_paths(G, src, dst, k=K_PATHS)
+                if not candidates:
+                    continue
 
-            # Xác suất attacker chọn đường nào(random with bias)
-            chosen_index = np.random.choice(len(candidates), p=probs) # chọn ngẫu nhiên dựa trên xác suất của các ứng viên 
-            
-            # saving data for trainning data
-            for i, f in enumerate(features_list):
-                f["label"] = 1 if i == chosen_index else 0  # attacker chọn đường này
+                shortest_w = path_weight(candidates[0], G)
+
+                # 3) FEATURES
+                features_list = []
+                for rank, path in enumerate(candidates):
+                    f = extract_features_fn(path, G, shortest_w, rank=rank+1)
+                    features_list.append(f)
+
+                # 4) BEHAVIOR (NO LABEL)
+                behavior = random.choice(["attacker", "user", "noise"])
+                if behavior == "attacker":
+                    idx, attack_mode = attacker_behavior(features_list, mode="random")
+                elif behavior == "user":
+                    idx = user_behavior(features_list)
+                    attack_mode = "none"
+                else:
+                    idx = noisy_behavior(features_list)
+                    attack_mode = "none"
+
+                f = features_list[idx]
+
+                # 5) POLICY ORACLE (LABELING)
+                label = policy_oracle(f, G, dst)
+
+                # 6) SAVE SAMPLE
+                f["label"] = label
                 f["src"] = src
                 f["dst"] = dst
-                f["path"] = " -> ".join(str(n) for n in candidates[i])
-                f["probability"] = round(float(probs[i]), 4)
+                f["type"] = "ATTACK" if label == 1 else "NORMAL"
+                f["attack_mode"] = attack_mode
+                f["actor"] = behavior   # KHÔNG dùng để train
+
                 dataset.append(f)
 
-    os.makedirs("data", exist_ok=True) # tạo thư mục 'data' nếu nó chưa tồn tại
+            except Exception:
+                continue
 
+    # =========================
+    # SAVE
+    # =========================
     if dataset:
+        os.makedirs("data", exist_ok=True)
         df = pd.DataFrame(dataset)
-        
-        # (đưa label ra cuối)
-        cols = [c for c in df.columns if c != "label"] + ["label"]
-        df = df[cols]
-        
-        df.to_csv(OUTPUT_FILE, index=False) # xóa dữ liệu cũ ghi đè dữ liệu mới
-        print(f"\n✅ Xong! Dataset đã lưu tại: {OUTPUT_FILE}")
-        print(f"📊 Tổng số mẫu (rows): {len(df)}")
+        df = df.fillna(0)
+        df.to_csv(OUTPUT_FILE, index=False)
+
+        print("\n✅ DATASET GENERATED (POLICY ORACLE)")
+        print(f"📊 Total samples: {len(df)}")
+        print(f"🔴 Attack (1): {len(df[df['label']==1])}")
+        print(f"🟢 Normal (0): {len(df[df['label']==0])}")
+        print("🔍 Actor breakdown (NOT for training):")
+        print(df['actor'].value_counts())
+        print(f"💾 Saved to: {OUTPUT_FILE}")
     else:
-        print("⚠️ Không sinh được dữ liệu nào. Hãy kiểm tra lại logic đồ thị.")
+        print("⚠️ No data generated.")
 
-
+# =========================
+# EXECUTION (TEST)
+# =========================
 if __name__ == "__main__":
-    random.seed(42)
-    np.random.seed(42)
-    
-    generate_dataset()
+    try:
+        from src.network_builder import build_random_policy_oracle_graph
+        from src.feature_extractor import extract_features
+        generate_dataset(build_random_policy_oracle_graph, extract_features)
+    except ImportError:
+        print("❌ Cannot import project modules. Run from project root:")
+        print("python -m src.data_generator_policy_oracle")
