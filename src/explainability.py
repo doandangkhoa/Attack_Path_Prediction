@@ -181,7 +181,7 @@ def analyze_path(G, path, ai_confidence=None):
             severity = "CRITICAL"
         elif ai_confidence > 0.7:
             severity = "HIGH"
-        elif ai_confidence > 0.4:
+        elif ai_confidence > 0.5:
             severity = "MEDIUM"
         else:
             severity = "LOW"

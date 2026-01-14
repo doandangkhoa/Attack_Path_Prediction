@@ -126,22 +126,6 @@ def extract_features(candidate_path, graph, shortest_path_weight, rank=0, role_w
             has_admin_access = 1
             role_score += 4
 
-    # ==========================================================
-    # 4. STRUCTURAL COMPLEXITY
-    # ==========================================================
-    role_counts = Counter(roles)
-    total_roles = sum(role_counts.values())
-
-    if total_roles > 0:
-        role_entropy = -sum((c/total_roles) * np.log2(c/total_roles) for c in role_counts.values())
-    else:
-        role_entropy = 0
-
-    # ==========================================================
-    # 5. RISK MODELING (SOFT, KHÔNG LỘ LUẬT)
-    # ==========================================================
-    deviation_weight = abs(total_weight - shortest_path_weight)
-
     # Base risk
     risk_factor = (max_detection + 1) * (exploit_count + 1) / (min_weight + 1)
 
@@ -170,13 +154,6 @@ def extract_features(candidate_path, graph, shortest_path_weight, rank=0, role_w
     return {
         # --- STRUCTURE ---
         'path_length': len(candidate_path),
-
-        # --- WEIGHT ---
-        'total_weight': total_weight,
-        'avg_weight': round(avg_weight, 2),
-        'min_weight': min_weight,
-        'std_weight': round(std_weight, 3),
-        'deviation_weight': deviation_weight,
 
         # --- DETECTION ---
         'total_detection': total_detection,

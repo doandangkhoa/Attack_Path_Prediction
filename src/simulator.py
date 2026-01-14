@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import os
+from src.pathfinding.k_shortest_paths import top_k_shortest_paths
 
 # =========================
 # CONFIGURATION
@@ -51,15 +52,6 @@ def select_attack_targets(G):
         elif "admin" in label:
             targets.append(n)
     return list(set(targets))
-
-# =========================
-# PATHFINDING
-# =========================
-def top_k_shortest_paths(G, src, dst, k=5):
-    try:
-        return list(nx.shortest_simple_paths(G, src, dst, weight="weight"))[:k]
-    except:
-        return []
 
 # =========================
 # BEHAVIOR MODELS (NO LABELING)
@@ -141,8 +133,17 @@ def policy_oracle(f, G, src, dst):
     if f.get("role_entropy", 0) > 1.5 and f.get("total_weight", 0) > 120:
         risk += 1.0
 
-    # --- Rule 5: Detection footprint
-    if f.get("max_detection", 0) > 7:
+    # --- Rule 5: Stealth (low detection = higher risk)
+    det_total = f.get("total_detection", 0)
+    max_det = f.get("max_detection", 0)
+
+    # Chuẩn hóa detection (giả sử max_total_detection ≈ 150)
+    det_prob = min(det_total / 150.0, 1.0)
+    stealth = 1 - det_prob
+
+    if stealth > 0.7:          # rất khó bị phát hiện
+        risk += 2.0
+    elif stealth > 0.4:        # mức trung bình
         risk += 1.0
 
     # --- Rule 6: External → Internal access (VPN / Misconfig)

@@ -203,7 +203,7 @@ def pyvis_graph(G, highlight_paths=None, best_path=None, source=None, destinatio
 # --- 0. Khởi tạo Session State ---
 if 'graph_state' not in st.session_state:
     np.random.seed(42) 
-    st.session_state['base_G'] = build_demo_network()
+    st.session_state['base_G'] = build_random_policy_oracle_graph()
     st.session_state['current_G'] = st.session_state['base_G'].copy()
     st.session_state['defense_history'] = None 
     st.session_state['sim_result'] = None # Biến lưu kết quả chạy
@@ -362,9 +362,9 @@ with tab1:
             # Đánh giá mức độ rủi ro
             if rf_conf > 0.9:
                 risk_label, risk_color, icon = "CRITICAL", "#d63031", "🔥"
-            elif rf_conf > 0.7:
+            elif rf_conf > 0.6:
                 risk_label, risk_color, icon = "HIGH", "#e17055", "⚠️"
-            elif rf_conf > 0.5:
+            elif rf_conf > 0.3:
                 risk_label, risk_color, icon = "MEDIUM", "#e1e349", "⚠️"
             else:
                 risk_label, risk_color, icon = "SAFE", "#00b894", "🛡️"
@@ -381,7 +381,6 @@ with tab1:
             </div>
             """, unsafe_allow_html=True)
             
-            st.divider()
             # ================================
             # RISK DIMENSION BREAKDOWN
             # ================================
@@ -399,6 +398,7 @@ with tab1:
                 # Các trục rủi ro chính
                 cost_score = total_weight
                 detection_score = feat.get("total_detection", 0)
+                detection_prob = (detection_score / 704) * 100
                 exploit_score = feat.get("exploit_count", 0)
                 privilege_score = feat.get("privilege_gain", 0)
 
@@ -406,7 +406,7 @@ with tab1:
                     "Rank": i + 1,
                     "Selection": is_selected,
                     "AI Score": rf_prob,
-                    "Detectionable": detection_score,
+                    "Detectionable": detection_prob,
                     "Exploit": exploit_score,
                     "Privilege": privilege_score,
                     "Cost": total_weight,
@@ -433,8 +433,11 @@ with tab1:
                         "Effort (Cost)",
                         help="Độ khó thực hiện. Thấp = dễ tấn công"
                     ),
-                    "Detection": st.column_config.NumberColumn(
-                        "Detection Level",
+                    "Detectionable": st.column_config.NumberColumn(
+                        "Stealthy",
+                        format="%.0f%%",
+                        min_value=0,
+                        max_value=1,
                         help="Mức độ bị IDS/EDR phát hiện. Cao = dễ bị phát hiện"
                     ),
                     "Exploit": st.column_config.NumberColumn(
