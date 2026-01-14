@@ -1,27 +1,24 @@
-def analyze_path(G, path):
+def analyze_path(G, path, ai_confidence: float):
     """
-    Human-Explainable Attack Path Analysis
-    - KHÔNG dựa vào ML feature
-    - Tự suy luận từ topology, edge, zone, role
+    Hybrid AI + Human Explainability
+    - Severity: DO AI QUYẾT ĐỊNH (dựa trên ai_confidence)
+    - Explain: suy luận từ topology, user role, authorization, trust zone
 
-    Dựa trên:
-    - edge["type"]       : exploit / privilege / authorized / misconfig / normal
-    - edge["detection"] : độ dễ bị phát hiện (0–100)
-    - edge["weight"]    : chi phí
-    - edge["mfa"]       : có MFA hay không
-    - node["layer"]     : Internet / DMZ / Internal / Admin / Secure...
-    - node["role"]      : web / app / database / identity / bastion / user
+    Mở rộng:
+    - Privilege escalation: dựa trên USER ROLE (vd: helpdesk ➝ admin)
+    - Sensitive asset access: xét theo QUYỀN (authorized hay không)
     """
 
     steps = []
     phases = []
     findings = []
 
-    # ===== METRICS (INDEPENDENT) =====
+    # ===== METRICS (EXPLAINABILITY ONLY) =====
     exploit_steps = 0
     privilege_steps = 0
     misconfig_steps = 0
     authorized_steps = 0
+    unauthorized_access = 0
 
     detection_sum = 0
     edge_count = 0
@@ -31,6 +28,8 @@ def analyze_path(G, path):
     reached_sensitive_asset = False
     crossed_trust_boundary = False
     bypassed_mfa = False
+    user_privilege_escalation = False
+    unauthorized_sensitive_access = False
 
     # ===== TRUST LEVEL =====
     trust_level = {
@@ -45,6 +44,19 @@ def analyze_path(G, path):
         "Secure_Admin": 100
     }
 
+    # ===== ROLE HIERARCHY (NGƯỜI DÙNG) =====
+    role_level = {
+        "guest": 0,
+        "user": 10,
+        "helpdesk": 30,
+        "operator": 40,
+        "admin": 70,
+        "root": 100
+    }
+
+    # ===== SENSITIVE ASSETS =====
+    sensitive_roles = ["database", "identity", "domain_controller"]
+
     for u, v in zip(path[:-1], path[1:]):
         edge = G[u][v]
         node_u = G.nodes[u]
@@ -53,16 +65,23 @@ def analyze_path(G, path):
         etype = edge.get("type", "normal").lower()
         detection = edge.get("detection", 0)
         weight = edge.get("weight", 0)
-        privilege = edge.get("privilege", 0)
         has_mfa = edge.get("mfa", False)
+        is_authorized = edge.get("authorized", True)   # NEW: có quyền hay không
 
         layer_u = node_u.get("layer", "Unknown")
         layer_v = node_v.get("layer", "Unknown")
-        role_v = node_v.get("role", "unknown")
+
+        role_u = node_u.get("user_role", "user").lower()
+        role_v = node_v.get("user_role", role_u).lower()  # user context
+
+        asset_role_v = node_v.get("role", "unknown").lower()
         label_v = str(node_v.get("label", v)).lower()
 
         trust_u = trust_level.get(layer_u, 0)
         trust_v = trust_level.get(layer_v, 0)
+
+        role_u_level = role_level.get(role_u, 0)
+        role_v_level = role_level.get(role_v, role_u_level)
 
         # ===== METRIC ACCUMULATION =====
         detection_sum += detection
@@ -74,7 +93,7 @@ def analyze_path(G, path):
             "to": v,
             "type": "transit",
             "phase": "Network Movement",
-            "description": "➡️ Di chuyển trong mạng."
+            "description": "Di chuyển trong mạng."
         }
 
         # =====================================================
@@ -87,18 +106,19 @@ def analyze_path(G, path):
 
             step["type"] = "exploit"
             step["phase"] = phase
-            step["description"] = "💣 Khai thác lỗ hổng kỹ thuật để chiếm quyền truy cập."
+            step["description"] = "Khai thác lỗ hổng kỹ thuật."
 
         # =====================================================
-        # 2. PRIVILEGE ESCALATION (ACCOUNT)
+        # 2. USER PRIVILEGE ESCALATION (HELPDESK ➝ ADMIN)
         # =====================================================
-        elif etype == "privilege":
+        elif role_v_level > role_u_level:
             privilege_steps += 1
+            user_privilege_escalation = True
             phases.append("Privilege Escalation")
 
-            step["type"] = "privilege_escalation"
+            step["type"] = "user_privilege_escalation"
             step["phase"] = "Privilege Escalation"
-            step["description"] = "⚡ Leo thang đặc quyền tài khoản (User ➝ Admin/Root)."
+            step["description"] = f"Leo thang đặc quyền người dùng: {role_u} ➝ {role_v}."
 
         # =====================================================
         # 3. MISCONFIG / SHADOW IT
@@ -109,44 +129,59 @@ def analyze_path(G, path):
 
             step["type"] = "misconfig"
             step["phase"] = "Defense Evasion"
-            step["description"] = "🛠️ Lợi dụng cấu hình sai / hệ thống không được kiểm soát."
+            step["description"] = "Lợi dụng cấu hình sai / hệ thống không kiểm soát."
 
         # =====================================================
-        # 4. AUTHORIZED (ABUSE OF LEGIT ACCESS)
+        # 4. AUTHORIZED / UNAUTHORIZED ACCESS
         # =====================================================
         elif etype == "authorized":
             authorized_steps += 1
-            phase = "Collection"
-            if role_v in ["database", "identity"]:
-                phase = "Impact"
 
-            phases.append(phase)
+            # Nếu truy cập tài sản nhạy cảm
+            if asset_role_v in sensitive_roles:
+                reached_sensitive_asset = True
 
-            step["type"] = "authorized"
-            step["phase"] = phase
-            if has_mfa:
-                step["description"] = "🔑 Truy cập hợp lệ có MFA."
+                if not is_authorized:
+                    unauthorized_access += 1
+                    unauthorized_sensitive_access = True
+                    phases.append("Impact")
+
+                    step["type"] = "unauthorized_access"
+                    step["phase"] = "Impact"
+                    step["description"] = "Truy cập tài sản nhạy cảm KHÔNG được phép."
+                else:
+                    phases.append("Collection")
+                    step["type"] = "authorized"
+                    step["phase"] = "Collection"
+                    step["description"] = "Truy cập hợp lệ vào tài nguyên nhạy cảm."
             else:
+                phases.append("Collection")
+                step["type"] = "authorized"
+                step["phase"] = "Collection"
+                step["description"] = "Truy cập hợp lệ."
+
+            if not has_mfa:
                 bypassed_mfa = True
-                step["description"] = "⚠️ Truy cập hợp lệ KHÔNG có MFA (nguy cơ bị lạm dụng)."
 
         # =====================================================
         # 5. ZONE / TRUST ESCALATION
         # =====================================================
-        elif trust_v > trust_u or privilege > 0:
-            privilege_steps += 1
-            crossed_trust_boundary = True
-            phases.append("Privilege Escalation")
+        elif trust_v > trust_u:
 
-            step["type"] = "zone_elevation"
-            step["phase"] = "Privilege Escalation"
-            step["description"] = f"⚡ Leo thang vùng tin cậy: {layer_u} ➝ {layer_v}."
+            # ❌ KHÔNG tính Edge → DMZ là leo thang
+            if layer_u in ["Edge", "External", "Internet"] and layer_v == "DMZ":
+                step["type"] = "transit"
+                step["phase"] = "Initial Access"
+                step["description"] = f"Di chuyển từ vùng ngoài ({layer_u}) vào DMZ."
 
-        # =====================================================
-        # 6. SENSITIVE ASSET
-        # =====================================================
-        if role_v in ["database", "identity", "domain_controller"]:
-            reached_sensitive_asset = True
+            else:
+                privilege_steps += 1
+                crossed_trust_boundary = True
+                phases.append("Privilege Escalation")
+
+                step["type"] = "zone_elevation"
+                step["phase"] = "Privilege Escalation"
+                step["description"] = f"Vượt ranh giới vùng tin cậy: {layer_u} ➝ {layer_v}."
 
         if "bastion" in label_v:
             findings.append("Đường đi thông qua Bastion host")
@@ -159,59 +194,63 @@ def analyze_path(G, path):
     avg_detection = round(detection_sum / edge_count, 2) if edge_count else 0
 
     # =====================================================
-    # SEVERITY HEURISTIC (RULE-BASED, NOT ML)
+    # AI-DRIVEN SEVERITY (QUYẾT ĐỊNH CUỐI CÙNG)
     # =====================================================
-    severity = "LOW"
-
-    if exploit_steps > 0 and privilege_steps > 0 and reached_sensitive_asset:
+    if ai_confidence >= 0.9:
         severity = "CRITICAL"
-    elif exploit_steps > 0 and privilege_steps > 0:
+    elif ai_confidence >= 0.75:
         severity = "HIGH"
-    elif exploit_steps > 0 or misconfig_steps > 0:
+    elif ai_confidence >= 0.5:
         severity = "MEDIUM"
+    else:
+        severity = "LOW"
 
     # =====================================================
-    # HUMAN SUMMARY (INDEPENDENT)
+    # HUMAN EXPLANATION (GIẢI THÍCH CHO AI)
     # =====================================================
     reasons = []
 
     if exploit_steps > 0:
         reasons.append(f"{exploit_steps} bước khai thác lỗ hổng")
-    if privilege_steps > 0:
-        reasons.append(f"{privilege_steps} lần leo thang đặc quyền")
-    if misconfig_steps > 0:
-        reasons.append("lợi dụng cấu hình sai")
-    if reached_sensitive_asset:
-        reasons.append("tiếp cận tài sản nhạy cảm")
-    if bypassed_mfa:
-        reasons.append("bỏ qua xác thực MFA")
+    if user_privilege_escalation:
+        reasons.append("leo thang đặc quyền người dùng")
     if crossed_trust_boundary:
         reasons.append("vượt ranh giới vùng tin cậy")
+    if unauthorized_sensitive_access:
+        reasons.append("truy cập trái phép tài sản nhạy cảm")
+    if bypassed_mfa:
+        reasons.append("bỏ qua MFA")
+    if misconfig_steps > 0:
+        reasons.append("lợi dụng cấu hình sai")
 
     if reasons:
-        summary = "⚠️ Chuỗi hành vi đáng ngờ: " + ", ".join(reasons) + "."
+        summary = f"⚠️ AI đánh giá mức {severity} (confidence={ai_confidence:.2f}) do: " + ", ".join(reasons) + "."
     else:
-        summary = "Hoạt động mạng bình thường, không thấy dấu hiệu tấn công rõ ràng."
+        summary = f"Hoạt động mạng được AI đánh giá {severity} (confidence={ai_confidence:.2f})."
 
     return {
-        "severity": severity,
+        "severity": severity,             # 🔑 DO AI QUYẾT ĐỊNH
+        "ai_confidence": ai_confidence,
         "summary": summary,
         "steps": steps,
         "phases": list(set(phases)),
 
-        # ===== PURE EXPLAINABILITY METRICS =====
+        # ===== EXPLAINABILITY METRICS =====
         "metrics": {
             "exploit_steps": exploit_steps,
             "privilege_steps": privilege_steps,
             "misconfig_steps": misconfig_steps,
             "authorized_steps": authorized_steps,
+            "unauthorized_access": unauthorized_access,
             "avg_detection": avg_detection,
             "total_cost": total_cost
         },
 
         "findings": {
             "reached_sensitive_asset": reached_sensitive_asset,
+            "unauthorized_sensitive_access": unauthorized_sensitive_access,
             "crossed_trust_boundary": crossed_trust_boundary,
-            "bypassed_mfa": bypassed_mfa
+            "bypassed_mfa": bypassed_mfa,
+            "user_privilege_escalation": user_privilege_escalation
         }
     }

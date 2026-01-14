@@ -419,7 +419,7 @@ with tab1:
             # HIỂN THỊ BẢNG TỔNG QUÁT
             # ================================
             st.dataframe(
-                df[["Rank", "AI Score", "Cost", "Detectionable"]],
+                df[["Rank", "AI Score", "Cost", "Detectionable", "Exploit", "Privilege"]],
                 column_config={
                     "AI Score": st.column_config.ProgressColumn(
                         "AI Threat Score",
@@ -439,14 +439,14 @@ with tab1:
                         max_value=99,
                         help="Mức độ bị IDS/EDR phát hiện. Cao = dễ bị phát hiện"
                     ),
-                    # "Exploit": st.column_config.NumberColumn(
-                    #     "Exploit Steps",
-                    #     help="Số bước khai thác lỗ hổng"
-                    # ),
-                    # "Privilege": st.column_config.NumberColumn(
-                    #     "Privilege Impact",
-                    #     help="Mức độ leo thang đặc quyền"
-                    # ),
+                    "Exploit": st.column_config.NumberColumn(
+                        "Exploit Steps",
+                        help="Số bước khai thác lỗ hổng"
+                    ),
+                    "Privilege": st.column_config.NumberColumn(
+                        "Privilege Impact",
+                        help="Mức độ leo thang đặc quyền"
+                    ),
                 },
                 hide_index=True,
                 use_container_width=True,
@@ -468,7 +468,7 @@ with tab1:
         highlighted_idx = st.session_state.get('highlighted_path_idx', chosen_idx)
         selected_path = result["paths"][highlighted_idx]
         selected_features = result["features"][highlighted_idx]
-        analysis = analyze_path(G, selected_path)
+        analysis = analyze_path(G, selected_path, ai_confidence=rf_prob)
 
         # 2. Hiển thị Card Tổng quan (HTML/CSS)
         st.markdown(f"""
