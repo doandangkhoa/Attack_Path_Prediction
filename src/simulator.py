@@ -108,7 +108,7 @@ def noisy_behavior(features_list):
 def policy_oracle(f, G, src, dst):
     """
     Gán nhãn dựa trên RỦI RO (policy-based), không phụ thuộc actor.
-    label: 1 = Attack / Policy Violation, 0 = Normal
+    label: 1 = Attack, 0 = Normal
     Có stochastic boundary để tránh ML học vẹt rule.
     """
     risk = 0.0
@@ -129,7 +129,7 @@ def policy_oracle(f, G, src, dst):
         if f.get("has_mfa", 1) == 0:
             risk += 1.5
 
-    # --- Rule 5: Detection & Stealth Analysis (Updated) ---
+    # --- Rule 4: Detection & Stealth Analysis (Updated) ---
     det_total = f.get("total_detection", 0)
     det_max = f.get("max_detection", 0)
     
@@ -137,24 +137,21 @@ def policy_oracle(f, G, src, dst):
     has_malicious_intent = f.get("exploit_count", 0) > 0 or f.get("privilege_gain", 0) > 0
 
     # Case A: Tấn công "Ồn ào" (Noisy Attack)
-    # Ví dụ: Dò quét cổng, Brute-force. IDS/Firewall rú còi inh ỏi.
-    # -> Đây chắc chắn là Attack, nhưng là loại dễ chặn.
+    # Ví dụ: Dò quét cổng, Brute-force.
     if det_max >= 8 or det_total >= 25:
         risk += 1  # Cộng điểm rủi ro vừa phải
 
-    # Case B: Tấn công "Tàng hình" (Stealthy / APT) - QUAN TRỌNG
+    # Case B: Tấn công "Tàng hình" (Stealthy / APT) 
     # Có hành vi xấu (Exploit/Privilege) NHƯNG Detection lại thấp bất thường.
     # -> Chứng tỏ kẻ tấn công đang dùng kỹ thuật né tránh (Evasion) hoặc đi qua kênh ngầm.
-    # -> Cần PHẠT NẶNG hơn cả tấn công ồn ào.
     elif has_malicious_intent and det_total < 5:
         risk += 2  # Phạt cực nặng (Critical Risk)
 
-    # --- Rule 6: External → Internal access (VPN / Misconfig)
+    # --- Rule 5: External → Internal access (VPN / Misconfig)
     src_layer = G.nodes[src].get("layer")
     dst_layer = G.nodes[dst].get("layer")
 
     if src_layer == "External" and dst_layer == "Internal":
-        # Dùng feature thay vì string path
         has_vpn = f.get("has_vpn", 0)
         has_mfa = f.get("has_mfa", 0)
         has_bastion = f.get("has_bastion", 0)
@@ -162,7 +159,7 @@ def policy_oracle(f, G, src, dst):
 
         if has_vpn:
             if has_mfa:
-                risk += 0.5
+                risk -= 0.5
             else:
                 risk += 2.0
 
@@ -178,9 +175,9 @@ def policy_oracle(f, G, src, dst):
             risk += 4.0
 
     # --- STOCHASTIC BOUNDARY (ANTI-MEMORIZATION)
-    threshold = 5.0
     noise = np.random.normal(0, 0.8)
 
+    threshold = 5.0
     return 1 if (risk + noise) >= threshold else 0
 
 # =========================

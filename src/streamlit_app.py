@@ -397,7 +397,7 @@ with tab1:
                 is_selected = "⭐" if i == chosen_idx else f"#{i+1}"
                 # Các trục rủi ro chính
                 cost_score = total_weight
-                detection_prob = feat.get("total_detection", 0) * 0.2
+                detection_prob = feat.get("total_detection", 0) / 704 * 100
                 exploit_score = feat.get("exploit_count", 0)
                 privilege_score = feat.get("privilege_gain", 0)
 
