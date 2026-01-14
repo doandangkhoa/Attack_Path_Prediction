@@ -9,7 +9,7 @@ from src.pathfinding.k_shortest_paths import top_k_shortest_paths
 # CONFIGURATION
 # =========================
 N_GRAPHS = 400
-SAMPLES_PER_GRAPH = 15
+SAMPLES_PER_GRAPH = 25
 K_PATHS = 10
 OUTPUT_FILE = "data/generated_attack_paths_policy_oracle.csv"
 
@@ -115,7 +115,7 @@ def policy_oracle(f, G, src, dst):
 
     # --- Rule 1: Exploit usage
     if f.get("exploit_count", 0) > 0:
-        risk += 3.0
+        risk += 3.5
 
     # --- Rule 2: Privilege escalation
     if f.get("privilege_gain", 0) >= 2:
@@ -129,22 +129,25 @@ def policy_oracle(f, G, src, dst):
         if f.get("has_mfa", 1) == 0:
             risk += 1.5
 
-    # --- Rule 4: Structural anomaly
-    if f.get("role_entropy", 0) > 1.5 and f.get("total_weight", 0) > 120:
-        risk += 1.0
-
-    # --- Rule 5: Stealth (low detection = higher risk)
+    # --- Rule 5: Detection & Stealth Analysis (Updated) ---
     det_total = f.get("total_detection", 0)
-    max_det = f.get("max_detection", 0)
+    det_max = f.get("max_detection", 0)
+    
+    # Kiểm tra xem có hành vi xấu không (Exploit hoặc Leo quyền)
+    has_malicious_intent = f.get("exploit_count", 0) > 0 or f.get("privilege_gain", 0) > 0
 
-    # Chuẩn hóa detection (giả sử max_total_detection ≈ 150)
-    det_prob = min(det_total / 150.0, 1.0)
-    stealth = 1 - det_prob
+    # Case A: Tấn công "Ồn ào" (Noisy Attack)
+    # Ví dụ: Dò quét cổng, Brute-force. IDS/Firewall rú còi inh ỏi.
+    # -> Đây chắc chắn là Attack, nhưng là loại dễ chặn.
+    if det_max >= 8 or det_total >= 25:
+        risk += 1  # Cộng điểm rủi ro vừa phải
 
-    if stealth > 0.7:          # rất khó bị phát hiện
-        risk += 2.0
-    elif stealth > 0.4:        # mức trung bình
-        risk += 1.0
+    # Case B: Tấn công "Tàng hình" (Stealthy / APT) - QUAN TRỌNG
+    # Có hành vi xấu (Exploit/Privilege) NHƯNG Detection lại thấp bất thường.
+    # -> Chứng tỏ kẻ tấn công đang dùng kỹ thuật né tránh (Evasion) hoặc đi qua kênh ngầm.
+    # -> Cần PHẠT NẶNG hơn cả tấn công ồn ào.
+    elif has_malicious_intent and det_total < 5:
+        risk += 2  # Phạt cực nặng (Critical Risk)
 
     # --- Rule 6: External → Internal access (VPN / Misconfig)
     src_layer = G.nodes[src].get("layer")

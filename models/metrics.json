@@ -1,40 +1,36 @@
 {
-    "accuracy": 0.8905472636815921,
-    "f1": 0.8908730158730159,
-    "recall": 0.9126016260162602,
-    "precision": 0.8701550387596899,
-    "optimal_threshold": 0.48918464441266285,
+    "accuracy": 0.8967551622418879,
+    "f1": 0.91417361451692,
+    "recall": 0.8952929875120077,
+    "precision": 0.9338677354709419,
+    "optimal_threshold": 0.45393123068398966,
     "confusion_matrix": [
         [
-            446,
-            67
+            588,
+            66
         ],
         [
-            43,
-            449
+            109,
+            932
         ]
     ],
     "feature_importance": {
-        "privilege_gain": 0.2065197086110934,
-        "risk_factor": 0.14234878839047652,
-        "exploit_count": 0.1297202432512819,
-        "role_score": 0.1008902763570751,
-        "total_detection": 0.08208078976288952,
-        "avg_detection": 0.07138661645215198,
-        "max_detection": 0.062036630723105425,
-        "total_weight": 0.05575707609244101,
-        "path_length": 0.04597597224432491,
-        "deviation_weight": 0.0334107412822175,
-        "has_admin_access": 0.028172273923571182,
-        "has_mfa": 0.018362833276444532,
-        "security_controls": 0.011460198449588824,
-        "has_bastion": 0.006576521811417174,
-        "is_admin_source": 0.005301329371921085
+        "privilege_gain": 0.2339752765722986,
+        "exploit_count": 0.23157399344475485,
+        "risk_factor": 0.17695125687359564,
+        "total_detection": 0.07253659767362736,
+        "role_score": 0.06868067961436444,
+        "max_detection": 0.05471415118405087,
+        "avg_detection": 0.049388395830885515,
+        "path_length": 0.04766783657692665,
+        "has_admin_access": 0.02219798512025153,
+        "has_mfa": 0.02134098433996672,
+        "security_controls": 0.010660664341697563,
+        "has_bastion": 0.007080491963208583,
+        "is_admin_source": 0.003231686464371686
     },
     "feature_names": [
         "path_length",
-        "total_weight",
-        "deviation_weight",
         "total_detection",
         "avg_detection",
         "max_detection",

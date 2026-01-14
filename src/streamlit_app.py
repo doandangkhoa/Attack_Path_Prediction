@@ -203,7 +203,7 @@ def pyvis_graph(G, highlight_paths=None, best_path=None, source=None, destinatio
 # --- 0. Khởi tạo Session State ---
 if 'graph_state' not in st.session_state:
     np.random.seed(42) 
-    st.session_state['base_G'] = build_random_policy_oracle_graph()
+    st.session_state['base_G'] = build_demo_network()
     st.session_state['current_G'] = st.session_state['base_G'].copy()
     st.session_state['defense_history'] = None 
     st.session_state['sim_result'] = None # Biến lưu kết quả chạy
@@ -362,9 +362,9 @@ with tab1:
             # Đánh giá mức độ rủi ro
             if rf_conf > 0.9:
                 risk_label, risk_color, icon = "CRITICAL", "#d63031", "🔥"
-            elif rf_conf > 0.6:
+            elif rf_conf > 0.7:
                 risk_label, risk_color, icon = "HIGH", "#e17055", "⚠️"
-            elif rf_conf > 0.3:
+            elif rf_conf > 0.5:
                 risk_label, risk_color, icon = "MEDIUM", "#e1e349", "⚠️"
             else:
                 risk_label, risk_color, icon = "SAFE", "#00b894", "🛡️"
@@ -381,6 +381,7 @@ with tab1:
             </div>
             """, unsafe_allow_html=True)
             
+            st.divider()
             # ================================
             # RISK DIMENSION BREAKDOWN
             # ================================
@@ -394,11 +395,9 @@ with tab1:
 
                 total_weight = sum([G[u][v].get("weight", 0) for u, v in zip(p[:-1], p[1:])])
                 is_selected = "⭐" if i == chosen_idx else f"#{i+1}"
-
                 # Các trục rủi ro chính
                 cost_score = total_weight
-                detection_score = feat.get("total_detection", 0)
-                detection_prob = (detection_score / 704) * 100
+                detection_prob = feat.get("total_detection", 0) * 0.2
                 exploit_score = feat.get("exploit_count", 0)
                 privilege_score = feat.get("privilege_gain", 0)
 
@@ -420,7 +419,7 @@ with tab1:
             # HIỂN THỊ BẢNG TỔNG QUÁT
             # ================================
             st.dataframe(
-                df[["Rank", "AI Score", "Cost", "Detectionable", "Exploit", "Privilege"]],
+                df[["Rank", "AI Score", "Cost", "Detectionable"]],
                 column_config={
                     "AI Score": st.column_config.ProgressColumn(
                         "AI Threat Score",
@@ -434,20 +433,20 @@ with tab1:
                         help="Độ khó thực hiện. Thấp = dễ tấn công"
                     ),
                     "Detectionable": st.column_config.NumberColumn(
-                        "Stealthy",
-                        format="%.0f%%",
+                        "Detectability",
+                        format="%.2f%%",
                         min_value=0,
-                        max_value=1,
+                        max_value=99,
                         help="Mức độ bị IDS/EDR phát hiện. Cao = dễ bị phát hiện"
                     ),
-                    "Exploit": st.column_config.NumberColumn(
-                        "Exploit Steps",
-                        help="Số bước khai thác lỗ hổng"
-                    ),
-                    "Privilege": st.column_config.NumberColumn(
-                        "Privilege Impact",
-                        help="Mức độ leo thang đặc quyền"
-                    ),
+                    # "Exploit": st.column_config.NumberColumn(
+                    #     "Exploit Steps",
+                    #     help="Số bước khai thác lỗ hổng"
+                    # ),
+                    # "Privilege": st.column_config.NumberColumn(
+                    #     "Privilege Impact",
+                    #     help="Mức độ leo thang đặc quyền"
+                    # ),
                 },
                 hide_index=True,
                 use_container_width=True,
@@ -468,8 +467,8 @@ with tab1:
 
         highlighted_idx = st.session_state.get('highlighted_path_idx', chosen_idx)
         selected_path = result["paths"][highlighted_idx]
-
-        analysis = analyze_path(G, selected_path, ai_confidence=rf_conf)
+        selected_features = result["features"][highlighted_idx]
+        analysis = analyze_path(G, selected_path)
 
         # 2. Hiển thị Card Tổng quan (HTML/CSS)
         st.markdown(f"""
@@ -486,35 +485,57 @@ with tab1:
                 Summary
             </h3>
             <p style="font-size: 16px; color: #2d3436; margin-bottom: 5px;">
-                <strong> {analysis['summary']} </strong>
+                <strong>{analysis['summary']}</strong>
             </p>
             <div style="margin-top: 10px; font-size: 14px; color: #636e72;">
-                <strong>Attack Phases Involved:</strong> <span style="background-color: #f1f2f6; padding: 2px 8px; border-radius: 4px;">{', '.join(analysis['phases'])}</span>
+                <strong>Attack Phases Involved:</strong> 
+                <span style="background-color: #f1f2f6; padding: 2px 8px; border-radius: 4px;">
+                    {', '.join(analysis['phases'])}
+                </span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
         # 3. Hiển thị Metrics (3 Cột)
         m1, m2, m3 = st.columns(3)
-        m1.metric("Exploit Steps", analysis['exploit_count'], help="Số bước tấn công khai thác lỗ hổng")
-        m2.metric("Privileged/Auth Access", analysis['auth_count'], help="Số bước sử dụng quyền hạn (nguy cơ Insider Threat)")
-        m3.metric("Total Path Cost", f"{sum(step['weight'] for step in analysis['steps'])}", help="Tổng trọng số (Độ khó) của đường đi")
+
+        m1.metric(
+            "Exploit Steps",
+            analysis["metrics"]["exploit_steps"],
+            help="Số bước khai thác lỗ hổng kỹ thuật"
+        )
+
+        m2.metric(
+            "Privileged",
+            analysis["metrics"]["privilege_steps"],
+            help="Số bước leo thang đặc quyền / vượt vùng tin cậy"
+        )
+
+        m3.metric(
+            "Total Path Cost",
+            analysis["metrics"]["total_cost"],
+            help="Tổng trọng số của đường đi"
+        )
 
         # 4. Bảng chi tiết từng bước (Step-by-Step Table)
         st.subheader("Step-by-Step Execution Flow")
 
         rows = []
         for i, step in enumerate(analysis["steps"], 1):
-            # Tạo icon cho cột Type để dễ nhìn
+            # Icon theo loại hành vi
             type_icon = "➡️"
-            if step["type"] in ["exploit", "rce_exploit", "sqli", "phishing"]: type_icon = "💣"
-            elif step["type"] == "authorized": type_icon = "🔑"
-            elif step["type"] in ["privilege", "priv_esc"]: type_icon = "⚡"
-            elif step["type"] == "misconfig": type_icon = "🛠️"
+            if step["type"] == "exploit":
+                type_icon = "💣"
+            elif step["type"] == "authorized":
+                type_icon = "🔑"
+            elif step["type"] in ["privilege_escalation", "zone_elevation"]:
+                type_icon = "⚡"
+            elif step["type"] == "misconfig":
+                type_icon = "🛠️"
 
             rows.append({
                 "Step": i,
-                "From": get_node_label(step["from"]), # Dùng hàm helper lấy tên hiển thị
+                "From": get_node_label(step["from"]),
                 "To": get_node_label(step["to"]),
                 "Action": f"{type_icon} {step['type'].upper()}",
                 "Phase": step["phase"],
@@ -522,20 +543,7 @@ with tab1:
             })
 
         df_steps = pd.DataFrame(rows)
-
-        st.dataframe(
-            df_steps,
-            column_config={
-                "Step": st.column_config.NumberColumn("Step", width="small"),
-                "From": st.column_config.TextColumn("Source", width="small"),
-                "To": st.column_config.TextColumn("Destination", width="small"),
-                "Action": st.column_config.TextColumn("Action Type", width="small"),
-                "Phase": st.column_config.TextColumn("Kill Chain Phase", width="medium"),
-                "Details": st.column_config.TextColumn("Analysis", width="large"),
-            },
-            hide_index=True,
-            use_container_width=True
-        )
+        st.dataframe(df_steps, use_container_width=True)
         
 # --- TAB 2: MODEL PERFORMANCE (BÁO CÁO KỸ THUẬT) ---
 with tab2:

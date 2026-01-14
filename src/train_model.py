@@ -36,6 +36,13 @@ def train_baseline():
         # --- STRUCTURE ---
         'path_length',
 
+        # --- WEIGHT ---
+        # 'total_weight',
+        # 'avg_weight',
+        # 'min_weight',
+        # 'std_weight',
+        # 'deviation_weight',
+
         # --- DETECTION ---
         'total_detection',
         'avg_detection',
