@@ -1,33 +1,33 @@
 {
-    "accuracy": 0.8931924882629108,
-    "f1": 0.9082661290322581,
-    "recall": 0.8756073858114675,
-    "precision": 0.9434554973821989,
-    "optimal_threshold": 0.4612591402550747,
+    "accuracy": 0.9061032863849765,
+    "f1": 0.9309153713298791,
+    "recall": 0.9668161434977578,
+    "precision": 0.8975853455453788,
+    "optimal_threshold": 0.5794659629758211,
     "confusion_matrix": [
         [
-            621,
-            54
+            466,
+            123
         ],
         [
-            128,
-            901
+            37,
+            1078
         ]
     ],
     "feature_importance": {
-        "privilege_gain": 0.2392946520622776,
-        "exploit_count": 0.20219997322603533,
-        "risk_factor": 0.1967191759053416,
-        "total_detection": 0.07403593628527812,
-        "role_score": 0.06821387087132191,
-        "max_detection": 0.0582156944588295,
-        "avg_detection": 0.055005936498339084,
-        "path_length": 0.04542671861210495,
-        "has_mfa": 0.02181102401943232,
-        "has_admin_access": 0.018107099763395407,
-        "security_controls": 0.009829927615737139,
-        "has_bastion": 0.007847080936696508,
-        "is_admin_source": 0.0032929097452106025
+        "exploit_count": 0.3579997983711671,
+        "risk_factor": 0.20344801405992624,
+        "privilege_gain": 0.09299996402662579,
+        "role_score": 0.07100112496887294,
+        "total_detection": 0.0656204955042299,
+        "path_length": 0.06324728593125614,
+        "max_detection": 0.05509091859488822,
+        "avg_detection": 0.04662171031439147,
+        "has_admin_access": 0.017133042414811762,
+        "security_controls": 0.012699503883880152,
+        "has_bastion": 0.007251972319032626,
+        "is_admin_source": 0.003686277692734909,
+        "has_mfa": 0.0031998919181828404
     },
     "feature_names": [
         "path_length",

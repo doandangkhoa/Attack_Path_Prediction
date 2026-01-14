@@ -112,14 +112,24 @@ def policy_oracle(f, G, src, dst):
     Có stochastic boundary để tránh ML học vẹt rule.
     """
     risk = 0.0
-
+    has_bastion = f.get("has_bastion", 0)
+    exploit_count = f.get("exploit_count", 0)
+    
+    if has_bastion > 0 and exploit_count == 0:
+        # Trả về 0 (An toàn tuyệt đối) hoặc 0.1 (Rủi ro cực thấp)
+        return 0
+    
     # --- Rule 1: Exploit usage
     if f.get("exploit_count", 0) > 0:
-        risk += 3.5
+        risk += 3
 
     # --- Rule 2: Privilege escalation
-    if f.get("privilege_gain", 0) >= 2:
-        risk += 2.0
+    if f.get("privilege_gain", 0) >= 1:
+        if exploit_count > 0:
+            risk += 2  # Leo quyền + Có exploit -> Rất nguy hiểm
+        else:
+            # Leo quyền nhưng ko có exploit -> Nghi ngờ
+            risk += 0.5
 
     # --- Rule 3: Crown Jewels (DB / Identity)
     target_role = G.nodes[dst].get("role", "unknown")
