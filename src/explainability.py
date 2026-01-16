@@ -124,7 +124,7 @@ def analyze_path(G, path, ai_confidence: float):
         # 3. MISCONFIG / SHADOW IT
         # =====================================================
         elif etype == "misconfig":
-            misconfig_steps += 1
+            exploit_steps += 1
             phases.append("Defense Evasion")
 
             step["type"] = "misconfig"

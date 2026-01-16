@@ -430,7 +430,7 @@ with tab1:
                     ),
                     "Cost": st.column_config.NumberColumn(
                         "Effort (Cost)",
-                        help="Độ khó thực hiện. Thấp = dễ tấn công"
+                        help="Tấn công với mức chi phí thấp nhất"
                     ),
                     "Detectionable": st.column_config.NumberColumn(
                         "Detectability",
@@ -485,7 +485,7 @@ with tab1:
                 Summary
             </h3>
             <p style="font-size: 16px; color: #2d3436; margin-bottom: 5px;">
-                <strong>{analysis['summary']}</strong>
+                <strong></strong>
             </p>
             <div style="margin-top: 10px; font-size: 14px; color: #636e72;">
                 <strong>Attack Phases Involved:</strong> 
